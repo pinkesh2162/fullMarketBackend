@@ -3,6 +3,8 @@
 namespace App\Repositories;
 
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -34,6 +36,35 @@ class UserRepository
         return $this->model->create($data);
     }
 
+    /**
+     * @param $request
+     *
+     * @return array|JsonResponse
+     */
+    public function registerUser($request){
+        try {
+            $data = $request->except('password');
+            $data['password'] = Hash::make($request->password);
+
+            if(@$data['name']){
+                $parts = explode(' ', trim($data['name']), 2);
+                $data['first_name'] = $parts[0];
+                $data['last_name'] = $parts[1] ?? null;
+                unset($data['name']);
+            }
+
+            $user = $this->create($data);
+            $token = $user->createToken('auth_token')->plainTextToken;
+
+            return [
+                'user' => $user,
+                'token' => $token,
+            ];
+        }catch (\Exception $e){
+           throw new \Exception($e);
+        }
+    }
+    
     /**
      * Find user by email.
      *
@@ -74,6 +105,12 @@ class UserRepository
         return $user;
     }
 
+    /**
+     * @param $provider
+     * @param $socialUser
+     *
+     * @return User
+     */
     public function handleSocialResponse($provider, $socialUser)
     {
         $user = User::where('provider', $provider)->where('provider_id', $socialUser->getId())->first();
@@ -110,5 +147,31 @@ class UserRepository
         }
 
         return $user;
+    }
+
+    /**
+     * @param $request
+     *
+     * @return JsonResponse
+     */
+    public function handleResetPassword($request){
+        
+        $reset = DB::table('password_reset_tokens')
+            ->where('email', $request->email)
+            ->where('token', $request->otp)
+            ->first();
+
+        if (!$reset) {
+            return response()->json(['status' => false, 'message' => 'Invalid or expired OTP.'], 400);
+        }
+
+        $user = $this->findByEmail($request->email);
+        if (!$user) {
+            return response()->json(['status' => false, 'message' => 'User not found.'], 404);
+        }
+
+        $user->update(['password' => Hash::make($request->password)]);
+        
+        DB::table('password_reset_tokens')->where('email', $request->email)->delete();
     }
 }

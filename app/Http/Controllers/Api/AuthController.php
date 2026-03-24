@@ -8,13 +8,17 @@ use App\Repositories\UserRepository;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\ForgotPasswordMail;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
     /**
      * @var UserRepository 
      */
-    protected $userRepository;
+    protected $userRepo;
 
     /**
      * AuthController constructor.
@@ -22,7 +26,7 @@ class AuthController extends Controller
      */
     public function __construct(UserRepository $userRepository)
     {
-        $this->userRepository = $userRepository;
+        $this->userRepo = $userRepository;
     }
 
     /**
@@ -32,23 +36,12 @@ class AuthController extends Controller
      */
     public function register(UserRegisterRequest $request)
     {
-        $data = $request->except('password');
-        $data['password'] = Hash::make($request->password);
-
-        if(@$data['name']){
-            $parts = explode(' ', trim($data['name']), 2);
-            $data['first_name'] = $parts[0];
-            $data['last_name'] = $parts[1] ?? null;
-            unset($data['name']);
-        }
-        
-        $user = $this->userRepository->create($data);
-        $token = $user->createToken('auth_token')->plainTextToken;
+        $data = $this->userRepo->registerUser($request);
 
         return response()->json([
             'message' => 'User registered successfully',
-            'user' => $user,
-            'token' => $token,
+            'user' => $data['user'],
+            'token' => $data['token'],
         ], 201);
     }
 
@@ -63,7 +56,7 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        $user = $this->userRepository->findByEmail($request->email);
+        $user = $this->userRepo->findByEmail($request->email);
 
         if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json('The provided credentials are incorrect.', 422);
@@ -89,5 +82,69 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Logged out successfully'
         ]);
+    }
+
+    /**
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function forgotPassword(Request $request)
+    {
+        $request->validate(['email' => 'required|email']);
+        
+        $user = $this->userRepo->findByEmail($request->email);
+        if (!$user) {
+            return response()->json(['status' => false, 'message' => 'Email not found.'], 404);
+        }
+
+        $otp = rand(100000, 999999);
+        
+        DB::table('password_reset_tokens')->updateOrInsert(
+            ['email' => $user->email],
+            ['token' => $otp, 'created_at' => now()]
+        );
+
+        Mail::to($user->email)->send(new ForgotPasswordMail($otp));
+
+        return response()->json(['status' => true, 'message' => 'Password reset OTP sent to your email.']);
+    }
+
+    /**
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function resetPassword(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'otp' => 'required|numeric',
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+
+        $this->userRepo->handleResetPassword($request);
+        
+        return response()->json(['status' => true, 'message' => 'Password has been reset successfully.']);
+    }
+
+    /**
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function changePassword(Request $request)
+    {
+        $request->validate([
+            'current_password' => 'required|string',
+            'password'         => 'required|string|min:8|confirmed',
+        ]);
+
+        $user = $request->user();
+
+        if (!Hash::check($request->current_password, $user->password)) {
+            return response()->json(['status' => false, 'message' => 'Current password does not match.'], 400);
+        }
+
+        $user->update(['password' => Hash::make($request->password)]);
+
+        return response()->json(['status' => true, 'message' => 'Password changed successfully.']);
     }
 }
