@@ -12,14 +12,31 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->redirectGuestsTo(function (\Illuminate\Http\Request $request) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return null;
+            }
+            
+            return route('login');
+        });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e, $request) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Unauthenticated',
+                ], 401);
+            }
+        });
+        
         $exceptions->render(function (Throwable $e, $request) {
             if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json([
                     'status' => false,
-                    'message' => $e->getMessage(),
+                    'message' => config('app.debug')
+                        ? $e->getMessage()
+                        : 'Something went wrong',
                 ], 500);
             }
         });

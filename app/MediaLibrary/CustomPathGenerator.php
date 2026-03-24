@@ -2,14 +2,6 @@
 
 namespace App\MediaLibrary;
 
-use App\Models\Blog;
-use App\Models\Contact;
-use App\Models\Interview;
-use App\Models\PricingPlan;
-use App\Models\RecentWork;
-use App\Models\Service;
-use App\Models\Setting;
-use App\Models\Testimonial;
 use App\Models\User;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 use Spatie\MediaLibrary\Support\PathGenerator\PathGenerator;
@@ -30,12 +22,8 @@ class CustomPathGenerator implements PathGenerator
         $path = '{PARENT_DIR}'.DIRECTORY_SEPARATOR.$media->id.DIRECTORY_SEPARATOR;
 
         switch ($media->collection_name) {
-            case Setting::PATH;
-                return str_replace('{PARENT_DIR}', Setting::PATH, $path);
             case User::PROFILE;
                 return str_replace('{PARENT_DIR}', User::PROFILE, $path);
-            case Interview::VIDEO;
-                return str_replace('{PARENT_DIR}', Interview::VIDEO, $path);
             case 'default' :
                 return '';
         }

@@ -51,7 +51,8 @@ return [
     | the application so that it's available within Artisan commands.
     |
     */
-
+    'asset_url' => env('ASSET_URL', null),
+    'media_disc' => env('MEDIA_DISK', 'public'),
     'url' => env('APP_URL', 'http://localhost'),
 
     /*

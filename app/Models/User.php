@@ -55,11 +55,11 @@ class User extends Authenticatable implements HasMedia
     {
         return [
             'email_verified_at' => 'datetime',
-            'password' => 'hashed',
+            'password'          => 'hashed',
         ];
     }
 
-    public function getProfileImageAttribute()
+    public function getProfilePhotoAttribute()
     {
         /** @var Media $media */
         $media = $this->getMedia(self::PROFILE)->first();
