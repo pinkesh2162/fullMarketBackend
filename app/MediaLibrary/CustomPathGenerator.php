@@ -3,6 +3,7 @@
 namespace App\MediaLibrary;
 
 use App\Models\User;
+use App\Models\Store;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
 use Spatie\MediaLibrary\Support\PathGenerator\PathGenerator;
 
@@ -24,6 +25,10 @@ class CustomPathGenerator implements PathGenerator
         switch ($media->collection_name) {
             case User::PROFILE;
                 return str_replace('{PARENT_DIR}', User::PROFILE, $path);
+             case Store::PROFILE_PHOTO;
+                return str_replace('{PARENT_DIR}', Store::PROFILE_PHOTO, $path);
+             case Store::COVER_PHOTO;
+                return str_replace('{PARENT_DIR}', Store::COVER_PHOTO, $path);
             case 'default' :
                 return '';
         }

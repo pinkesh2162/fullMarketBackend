@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\SocialAuthController;
+use App\Http\Controllers\Api\StoreController;
 
 //guest routes
 Route::post('/register', [AuthController::class, 'register']);
@@ -20,4 +21,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/get-profile', [ProfileController::class, 'getProfile']);
     Route::post('/edit-profile', [ProfileController::class, 'updateProfile']);
     Route::post('/change-password', [AuthController::class, 'changePassword']);
+
+    // user store routes
+    Route::get('/store', [StoreController::class, 'show']);
+    Route::post('/edit-store', [StoreController::class, 'update']);
+    Route::post('/delete-store', [StoreController::class, 'destroy']);
 });

@@ -71,4 +71,12 @@ class User extends Authenticatable implements HasMedia
 
         return getUserImageInitial($this->id, $this->name);
     }
+
+    /**
+     * Get the store associated with the user.
+     */
+    public function store()
+    {
+        return $this->hasOne(Store::class);
+    }
 }
