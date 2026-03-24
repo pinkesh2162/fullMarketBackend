@@ -32,6 +32,8 @@ class User extends Authenticatable implements HasMedia
         'description',
         'password',
         'lang',
+        'provider',
+        'provider_id',
     ];
 
     const PROFILE = 'user';

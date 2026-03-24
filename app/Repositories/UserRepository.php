@@ -3,6 +3,8 @@
 namespace App\Repositories;
 
 use App\Models\User;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class UserRepository
 {
@@ -67,6 +69,44 @@ class UserRepository
         if (isset($data['profile_photo']) && $data['profile_photo'] instanceof \Illuminate\Http\UploadedFile) {
             $user->clearMediaCollection(User::PROFILE);
             $user->addMedia($data['profile_photo'])->toMediaCollection(User::PROFILE, config('app.media_disc', 'public'));
+        }
+
+        return $user;
+    }
+
+    public function handleSocialResponse($provider, $socialUser)
+    {
+        $user = User::where('provider', $provider)->where('provider_id', $socialUser->getId())->first();
+
+        if (! $user) {
+            $user = User::where('email', $socialUser->getEmail())->first();
+            if ($user && $socialUser->getEmail()) {
+                // Link account if email exists and matches
+                $user->update([
+                    'provider'    => $provider,
+                    'provider_id' => $socialUser->getId(),
+                ]);
+            } else {
+                // Check if name is provided, otherwise split email or use default
+                $name = $socialUser->getName();
+                $firstName = 'User';
+                $lastName = null;
+                if ($name) {
+                    $parts = explode(' ', trim($name), 2);
+                    $firstName = $parts[0];
+                    $lastName = $parts[1] ?? null;
+                }
+
+                // Create new account
+                $user = $this->create([
+                    'first_name'  => $firstName,
+                    'last_name'   => $lastName,
+                    'email'       => $socialUser->getEmail(),
+                    'provider'    => $provider,
+                    'provider_id' => $socialUser->getId(),
+                    'password'    => Hash::make(Str::random(24)),
+                ]);
+            }
         }
 
         return $user;
