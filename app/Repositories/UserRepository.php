@@ -2,6 +2,7 @@
 
 namespace App\Repositories;
 
+use App\Exceptions\ApiOperationFailedException;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -61,7 +62,7 @@ class UserRepository
                 'token' => $token,
             ];
         }catch (\Exception $e){
-           throw new \Exception($e);
+           throw new ApiOperationFailedException($e->getMessage(), 422);
         }
     }
     
@@ -154,7 +155,7 @@ class UserRepository
      *
      * @return JsonResponse
      */
-    public function handleResetPassword($request){
+    public function handleResetPassword($request): void{
         
         $reset = DB::table('password_reset_tokens')
             ->where('email', $request->email)
@@ -162,12 +163,12 @@ class UserRepository
             ->first();
 
         if (!$reset) {
-            return response()->json(['status' => false, 'message' => 'Invalid or expired OTP.'], 400);
+            throw new ApiOperationFailedException('Invalid or expired OTP.', 400);
         }
 
         $user = $this->findByEmail($request->email);
         if (!$user) {
-            return response()->json(['status' => false, 'message' => 'User not found.'], 404);
+            throw new ApiOperationFailedException('User not found.', 404);
         }
 
         $user->update(['password' => Hash::make($request->password)]);
