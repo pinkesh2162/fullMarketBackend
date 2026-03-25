@@ -2,13 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Foundation\Validation\ValidatesRequests;
+use Illuminate\Routing\Controller as BaseController;
+use Illuminate\Support\Facades\Response;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Facades\Response;
 
-abstract class Controller
+class Controller extends BaseController
 {
+    use AuthorizesRequests, ValidatesRequests;
+
     public const HTTP_OK = 200;
 
     public const HTTP_CREATED = 201;
