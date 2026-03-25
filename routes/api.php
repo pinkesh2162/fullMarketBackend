@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\Api\StoreController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ListingController;
+use App\Http\Controllers\Api\FavoriteController;
 
 //guest routes
 Route::post('/register', [AuthController::class, 'register']);
@@ -33,6 +34,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // listing routes
     Route::apiResource('listings', ListingController::class);
     Route::get('/my-listings', [ListingController::class, 'getMyListing']);
+
+    // favorites routes
+    Route::get('/favorites', [FavoriteController::class, 'index']);
+    Route::post('/listings/{listing}/favorite', [FavoriteController::class, 'store']);
+    Route::delete('/listings/{listing}/favorite', [FavoriteController::class, 'destroy']);
 
     // user store routes
     Route::get('/store', [StoreController::class, 'show']);
