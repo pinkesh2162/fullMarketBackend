@@ -34,7 +34,7 @@ class SocialAuthController extends Controller
         ]);
 
         if (! in_array($provider, ['google', 'apple'])) {
-            return response()->json(['status' => false, 'message' => 'Invalid provider.'], 400);
+            return $this->actionFailure('Invalid provider.', null, self::HTTP_BAD_REQUEST);
         }
 
         try {
@@ -44,17 +44,14 @@ class SocialAuthController extends Controller
                 $socialUser = Socialite::driver($provider)->stateless()->userFromToken($request->token);
             }
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => false, 'message' => 'Invalid or expired token.', 'error' => $e->getMessage(),
-            ], 401);
+            return $this->actionFailure('Invalid or expired token.', ['error' => $e->getMessage()], self::HTTP_UNAUTHORIZED);
         }
 
         $user = $this->userRepo->handleSocialResponse($provider, $socialUser);
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return response()->json([
-            'message' => 'Logged in successfully',
+        return $this->actionSuccess('Logged in successfully', [
             'user'    => $user,
             'token'   => $token,
         ]);

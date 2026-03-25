@@ -39,11 +39,10 @@ class AuthController extends Controller
     {
         $data = $this->userRepo->registerUser($request);
 
-        return response()->json([
-            'message' => 'User registered successfully',
+        return $this->actionSuccess('User registered successfully', [
             'user' => $data['user'],
             'token' => $data['token'],
-        ], 201);
+        ], self::HTTP_CREATED);
     }
 
     /**
@@ -60,13 +59,12 @@ class AuthController extends Controller
         $user = $this->userRepo->findByEmail($request->email);
 
         if (!$user || !Hash::check($request->password, $user->password)) {
-            return response()->json('The provided credentials are incorrect.', 422);
+            return $this->actionFailure('The provided credentials are incorrect.', null, self::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return response()->json([
-            'message' => 'Logged in successfully',
+        return $this->actionSuccess('Logged in successfully', [
             'user' => $user,
             'token' => $token,
         ]);
@@ -80,9 +78,7 @@ class AuthController extends Controller
     {
         $request->user()->currentAccessToken()->delete();
 
-        return response()->json([
-            'message' => 'Logged out successfully'
-        ]);
+        return $this->actionSuccess('Logged out successfully');
     }
 
     /**
@@ -95,7 +91,7 @@ class AuthController extends Controller
         
         $user = $this->userRepo->findByEmail($request->email);
         if (!$user) {
-            return response()->json(['status' => false, 'message' => 'Email not found.'], 404);
+            return $this->notFound('Email not found.');
         }
 
         $otp = rand(100000, 999999);
@@ -107,7 +103,7 @@ class AuthController extends Controller
 
         Mail::to($user->email)->send(new ForgotPasswordMail($otp));
 
-        return response()->json(['status' => true, 'message' => 'Password reset OTP sent to your email.']);
+        return $this->actionSuccess('Password reset OTP sent to your email.');
     }
 
     /**
@@ -125,7 +121,7 @@ class AuthController extends Controller
 
         $this->userRepo->handleResetPassword($request);
         
-        return response()->json(['status' => true, 'message' => 'Password has been reset successfully.']);
+        return $this->actionSuccess('Password has been reset successfully.');
     }
 
     /**
@@ -142,11 +138,11 @@ class AuthController extends Controller
         $user = $request->user();
 
         if (!Hash::check($request->current_password, $user->password)) {
-            return response()->json(['status' => false, 'message' => 'Current password does not match.'], 400);
+            return $this->actionFailure('Current password does not match.', null, self::HTTP_BAD_REQUEST);
         }
 
         $user->update(['password' => Hash::make($request->password)]);
 
-        return response()->json(['status' => true, 'message' => 'Password changed successfully.']);
+        return $this->actionSuccess('Password changed successfully.');
     }
 }

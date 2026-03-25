@@ -35,7 +35,7 @@ class ProfileController extends Controller
     {
         $user = UserResource::make($request->user());
         
-        return response()->json(['data' => $user, 'message' => 'User profile retrieved successfully'], 200);
+        return $this->actionSuccess('User profile retrieved successfully', $user);
     }
 
     /**
@@ -53,9 +53,6 @@ class ProfileController extends Controller
 
         $user = $this->userRepo->updateProfile($request->user(), $validatedData);
 
-        return response()->json([
-            'message' => 'Profile updated successfully.',
-            'user' => $user
-        ]);
+        return $this->actionSuccess('Profile updated successfully.', ['user' => $user]);
     }
 }

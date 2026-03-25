@@ -13,3 +13,13 @@ if (! function_exists('getAvatarUrl')) {
         return 'https://ui-avatars.com/api/';
     }
 }
+
+if (! function_exists('getRandomColor')) {
+    function getRandomColor($userId)
+    {
+        $colors = ['329af0', 'fc6369', 'ffaa2e', '42c9af', '7d68f0'];
+        $index = $userId % 5;
+
+        return $colors[$index];
+    }
+}
