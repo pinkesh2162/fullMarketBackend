@@ -78,4 +78,12 @@ class User extends Authenticatable implements HasMedia
     {
         return $this->hasOne(Store::class);
     }
+
+    /**
+     * Get the favorite listings associated with the user.
+     */
+    public function favoriteListings()
+    {
+        return $this->belongsToMany(Listing::class, 'favorites', 'user_id', 'listing_id')->withTimestamps();
+    }
 }
