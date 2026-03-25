@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\Api\StoreController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\ListingController;
 
 //guest routes
 Route::post('/register', [AuthController::class, 'register']);
@@ -15,6 +16,7 @@ Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 // Route::get('/auth/google/redirect', [SocialAuthController::class, 'redirectToGoogle']);
 Route::post('/auth/{provider}/callback', [SocialAuthController::class, 'handleProviderCallback']);
 Route::get('/categories', [CategoryController::class, 'index']);
+Route::get('/listings', [ListingController::class, 'index']);
 
 
 Route::middleware(['auth:sanctum'])->group(function () {
@@ -26,6 +28,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // category routes
     Route::post('/categories', [CategoryController::class, 'store']);
+
+    // listing routes
+    Route::apiResource('listings', ListingController::class);
+    Route::get('/my-listings', [ListingController::class, 'getMyListing']);
 
     // user store routes
     Route::get('/store', [StoreController::class, 'show']);

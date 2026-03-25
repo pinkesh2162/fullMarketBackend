@@ -3,6 +3,7 @@
 namespace App\MediaLibrary;
 
 use App\Models\Category;
+use App\Models\Listing;
 use App\Models\User;
 use App\Models\Store;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
@@ -32,9 +33,13 @@ class CustomPathGenerator implements PathGenerator
                 return str_replace('{PARENT_DIR}', Store::COVER_PHOTO, $path);
             case Category::CATEGORY_IMAGE;
                 return str_replace('{PARENT_DIR}', Category::CATEGORY_IMAGE, $path);
+            case Listing::LISTING_IMAGES;
+                return str_replace('{PARENT_DIR}', Listing::LISTING_IMAGES, $path);
             case 'default' :
                 return '';
         }
+
+        return '';
     }
 
     /**
