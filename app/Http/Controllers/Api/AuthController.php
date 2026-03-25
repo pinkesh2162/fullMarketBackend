@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\ApiOperationFailedException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UserRegisterRequest;
 use App\Repositories\UserRepository;
@@ -11,7 +12,6 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\ForgotPasswordMail;
-use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
@@ -32,6 +32,7 @@ class AuthController extends Controller
     /**
      * @param  UserRegisterRequest  $request
      *
+     * @throws ApiOperationFailedException
      * @return JsonResponse
      */
     public function register(UserRegisterRequest $request)
@@ -110,7 +111,8 @@ class AuthController extends Controller
     }
 
     /**
-     * @param Request $request
+     * @param  Request  $request
+     * @throws ApiOperationFailedException
      * @return JsonResponse
      */
     public function resetPassword(Request $request)

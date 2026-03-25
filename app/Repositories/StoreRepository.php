@@ -11,10 +11,10 @@ class StoreRepository
     /**
      * Update or Create a store for the given user.
      *
-     * @param int $userId
-     * @param array $data
-     * @return Store
+     * @param  int  $userId
+     * @param  array  $data
      * @throws ApiOperationFailedException
+     * @return Store
      */
     public function updateStore(int $userId, array $data): Store
     {

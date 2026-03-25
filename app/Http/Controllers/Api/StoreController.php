@@ -23,7 +23,7 @@ class StoreController extends Controller
      */
     public function show(): JsonResponse
     {
-        $store = Store::where('user_id', auth()->id())->first();
+        $store = Store::toBase()->where('user_id', auth()->id())->first();
 
         if (!$store) {
             return response()->json([
