@@ -53,6 +53,19 @@ class ListingController extends Controller
         return $this->actionSuccess('Listings fetched successfully', ListingResource::collection($listings));
     }
     
+    /**
+     * @param  Request  $request
+     * @return JsonResponse
+     */
+    public function getFeaturedListings(Request $request): JsonResponse
+    {
+        $perPage = @$request->perPage ?? 3;
+        
+        $listings = $this->listingRepo->getFeaturedListings($perPage);
+        
+        return $this->actionSuccess('Featured listings fetched successfully', ListingResource::collection($listings));
+    }
+    
 
     /**
      * @param  StoreListingRequest  $request

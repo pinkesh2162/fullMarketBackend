@@ -33,6 +33,7 @@ class Listing extends Model implements HasMedia
         'bedrooms',
         'bathrooms',
         'advance_options',
+        'views_count',
         'vehicle_type',
         'vehical_info',
         'fual_type',

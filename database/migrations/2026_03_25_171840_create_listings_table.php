@@ -17,6 +17,7 @@ return new class extends Migration
             $table->foreignId('store_id')->nullable()->constrained()->onDelete('cascade');
             $table->string('service_type')->nullable();
             $table->string('title')->nullable();
+            $table->unsignedInteger('views_count')->default(0);
             $table->foreignId('service_category')
                 ->nullable()->constrained('categories')->onDelete('set null');
             $table->string('service_modality')->nullable();

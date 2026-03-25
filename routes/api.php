@@ -17,6 +17,7 @@ Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 Route::post('/auth/{provider}/callback', [SocialAuthController::class, 'handleProviderCallback']);
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/listings', [ListingController::class, 'index']);
+Route::get('/featured-listings', [ListingController::class, 'getFeaturedListings']);
 
 
 Route::middleware(['auth:sanctum'])->group(function () {
