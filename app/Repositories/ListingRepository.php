@@ -72,4 +72,13 @@ class ListingRepository
     {
         return $listing->delete();
     }
+
+    public function getRelatedListings(Listing $listing, $perPage = 6): LengthAwarePaginator
+    {
+        return Listing::with(['user', 'store', 'category'])
+            ->where('service_category', $listing->service_category)
+            ->where('id', '!=', $listing->id)
+            ->latest()
+            ->paginate($perPage);
+    }
 }

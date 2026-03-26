@@ -35,12 +35,12 @@ class ListingController extends Controller
     {
         $perPage = @$request->perPage ?? 15;
         $filters = $request->only(['category', 'location', 'lat', 'long', 'radius']);
-        
+
         $listings = $this->listingRepo->getListings($filters, $perPage);
-        
+
         return $this->actionSuccess('Listings fetched successfully', ListingResource::collection($listings));
     }
-    
+
     /**
      * @param  Request  $request
      * @return JsonResponse
@@ -48,12 +48,12 @@ class ListingController extends Controller
     public function getMyListing(Request $request): JsonResponse
     {
         $perPage = @$request->perPage ?? 15;
-        
+
         $listings = $this->listingRepo->getMyListings($perPage);
-        
+
         return $this->actionSuccess('Listings fetched successfully', ListingResource::collection($listings));
     }
-    
+
     /**
      * @param  Request  $request
      * @return JsonResponse
@@ -62,12 +62,12 @@ class ListingController extends Controller
     {
         $perPage = @$request->perPage ?? 3;
         $filters = $request->only(['category', 'location', 'lat', 'long', 'radius']);
-        
+
         $listings = $this->listingRepo->getFeaturedListings($filters, $perPage);
-        
+
         return $this->actionSuccess('Featured listings fetched successfully', ListingResource::collection($listings));
     }
-    
+
 
     /**
      * @param  StoreListingRequest  $request
@@ -108,5 +108,17 @@ class ListingController extends Controller
 
         $this->listingRepo->deleteListing($listing);
         return $this->actionSuccess('Listing deleted successfully');
+    }
+
+    /**
+     * @param  Listing  $listing
+     * @param  Request  $request
+     * @return JsonResponse
+     */
+    public function getRelatedListings(Listing $listing, Request $request): JsonResponse
+    {
+        $perPage = @$request->perPage ?? 6;
+        $listings = $this->listingRepo->getRelatedListings($listing, $perPage);
+        return $this->actionSuccess('Related listings fetched successfully', ListingResource::collection($listings));
     }
 }

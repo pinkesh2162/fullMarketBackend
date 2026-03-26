@@ -20,6 +20,7 @@ Route::post('/auth/{provider}/callback', [SocialAuthController::class, 'handlePr
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/listings', [ListingController::class, 'index']);
 Route::get('/featured-listings', [ListingController::class, 'getFeaturedListings']);
+Route::get('/listings/{listing}/related', [ListingController::class, 'getRelatedListings']);
 Route::post('/claim-add', [ClaimController::class, 'store']);
 
 
