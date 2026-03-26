@@ -39,10 +39,38 @@ class AuthController extends Controller
     {
         $data = $this->userRepo->registerUser($request);
 
-        return $this->actionSuccess('User registered successfully', [
+        return $this->actionSuccess($data['message'], [
             'user' => $data['user'],
-            'token' => $data['token'],
         ], self::HTTP_CREATED);
+    }
+
+    /**
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function verifyEmail(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'otp' => 'required|string|size:6',
+        ]);
+
+        $data = $this->userRepo->verifyOtp($request->email, $request->otp);
+
+        return $this->actionSuccess('Email verified successfully.', $data);
+    }
+
+    /**
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function resendOtp(Request $request)
+    {
+        $request->validate(['email' => 'required|email']);
+
+        $this->userRepo->resendOtp($request->email);
+
+        return $this->actionSuccess('Verification OTP has been resent.');
     }
 
     /**
@@ -60,6 +88,10 @@ class AuthController extends Controller
 
         if (!$user || !Hash::check($request->password, $user->password)) {
             return $this->actionFailure('The provided credentials are incorrect.', null, self::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        if (!$user->email_verified_at) {
+            return $this->actionFailure('OTP is not verified.', null, 403);
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;

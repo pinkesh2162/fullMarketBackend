@@ -33,6 +33,9 @@ class User extends Authenticatable implements HasMedia
         'lang',
         'provider',
         'provider_id',
+        'otp',
+        'otp_expires_at',
+        'email_verified_at'
     ];
 
     const PROFILE = 'user';
@@ -86,5 +89,21 @@ class User extends Authenticatable implements HasMedia
     public function favoriteListings()
     {
         return $this->belongsToMany(Listing::class, 'favorites', 'user_id', 'listing_id')->withTimestamps();
+    }
+
+    /**
+     * Get the listings associated with the user.
+     */
+    public function listings()
+    {
+        return $this->hasMany(Listing::class);
+    }
+
+    /**
+     * Get the claims associated with the user.
+     */
+    public function claims()
+    {
+        return $this->hasMany(Claim::class);
     }
 }

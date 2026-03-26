@@ -6,30 +6,20 @@
 
     <!-- Body Content -->
     <div style="padding: 35px; background-color: #ffffff;">
-        <h2 style="font-size: 24px; font-weight: bold; margin-bottom: 20px;">Reset Your Password</h2>
+        <h1 style="font-size: 28px; font-weight: bold; margin-bottom: 25px; color: #333;">Welcome to FullMarket!</h1>
 
-        <p style="margin-bottom: 20px; font-size: 16px;">
-            Hello <a href="mailto:{{ $email }}" style="color: #007bff; text-decoration: none;">{{ $email }}</a>,
+        <p style="margin-bottom: 20px; font-size: 16px; color: #555;">
+            Hello {{ $user->first_name }} {{ $user->last_name }},
         </p>
 
-        <p style="margin-bottom: 20px; font-size: 16px; line-height: 1.5; color: #555;">
-            We received a request to reset the password for your FullMarket account.<br>
-            Click the button below to set a new password.
+        <p style="margin-bottom: 25px; font-size: 16px; color: #555; line-height: 1.5;">
+            Your account has been created successfully. Here are your login details:
         </p>
 
-        <p style="font-weight: bold; margin-bottom: 20px; font-size: 16px; color: #333;">Click the button below to continue.</p>
-
-        <div style="margin-bottom: 40px;">
-            <a href="{{ $resetLink }}" style="display: inline-block; padding: 14px 30px; background-color: #f05a28; color: #ffffff; text-decoration: none; font-weight: bold; border-radius: 8px; font-size: 16px;">Reset Password</a>
+        <div style="margin-bottom: 30px; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
+            <p style="margin: 0 0 10px 0; font-size: 16px;"><strong>Email:</strong> <span style="color: #007bff;">{{ $user->email }}</span></p>
+            <p style="margin: 0; font-size: 16px;"><strong>Password:</strong> {{ $password }}</p>
         </div>
-
-        <p style="color: #666; font-size: 14px; margin-bottom: 10px; line-height: 1.5;">
-            This link will help you reset your password on our site. If you did not request a password reset, you can safely ignore this email.
-        </p>
-
-        <p style="color: #666; font-size: 14px; margin-bottom: 30px;">
-            If you didn't request this, ignore this email.
-        </p>
 
         <!-- App Download -->
         <h3 style="font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #333;">Download our app</h3>

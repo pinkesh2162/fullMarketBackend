@@ -13,6 +13,8 @@ use App\Http\Controllers\Api\ClaimController;
 //guest routes
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/verify-email', [AuthController::class, 'verifyEmail']);
+Route::post('/resend-otp', [AuthController::class, 'resendOtp']);
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
 Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 // Route::get('/auth/google/redirect', [SocialAuthController::class, 'redirectToGoogle']);
@@ -29,6 +31,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/get-profile', [ProfileController::class, 'getProfile']);
     Route::post('/edit-profile', [ProfileController::class, 'updateProfile']);
+    Route::post('/delete-account', [ProfileController::class, 'deleteAccount']);
     Route::post('/change-password', [AuthController::class, 'changePassword']);
 
     // category routes

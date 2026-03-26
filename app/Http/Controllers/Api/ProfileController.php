@@ -55,4 +55,17 @@ class ProfileController extends Controller
 
         return $this->actionSuccess('Profile updated successfully.', ['user' => $user]);
     }
+
+    /**
+     * Delete the authenticated user account and all associated data.
+     *
+     * @param  Request  $request
+     * @return JsonResponse
+     */
+    public function deleteAccount(Request $request): JsonResponse
+    {
+        $this->userRepo->deleteUserAccount($request->user());
+
+        return $this->actionSuccess('Your account and all associated data have been permanently deleted.');
+    }
 }
