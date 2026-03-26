@@ -100,5 +100,17 @@ class Listing extends Model implements HasMedia
         $query->when($filters['location'] ?? false, function ($q, $location) {
             $q->where('additional_info->location->address', 'like', "%{$location}%");
         });
+
+        if (isset($filters['lat'], $filters['long'], $filters['radius'])) {
+            $lat = $filters['lat'];
+            $long = $filters['long'];
+            $radius = min($filters['radius'] ?? 0, 100);
+
+            $query->whereRaw("
+                (6371 * acos(cos(radians(?)) * cos(radians(additional_info->'$.location.lat')) 
+                * cos(radians(additional_info->'$.location.long') - radians(?)) 
+                + sin(radians(?)) * sin(radians(additional_info->'$.location.lat')))) <= ?
+            ", [$lat, $long, $lat, $radius]);
+        }
     }
 }

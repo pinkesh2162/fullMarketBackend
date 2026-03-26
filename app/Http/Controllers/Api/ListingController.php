@@ -34,7 +34,7 @@ class ListingController extends Controller
     public function index(Request $request): JsonResponse
     {
         $perPage = @$request->perPage ?? 15;
-        $filters = $request->only(['category', 'location']);
+        $filters = $request->only(['category', 'location', 'lat', 'long', 'radius']);
         
         $listings = $this->listingRepo->getListings($filters, $perPage);
         
@@ -61,7 +61,7 @@ class ListingController extends Controller
     public function getFeaturedListings(Request $request): JsonResponse
     {
         $perPage = @$request->perPage ?? 3;
-        $filters = $request->only(['category', 'location']);
+        $filters = $request->only(['category', 'location', 'lat', 'long', 'radius']);
         
         $listings = $this->listingRepo->getFeaturedListings($filters, $perPage);
         
