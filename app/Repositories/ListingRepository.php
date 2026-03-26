@@ -8,9 +8,10 @@ use Illuminate\Support\Facades\Auth;
 
 class ListingRepository
 {
-    public function getListings($perPage = 15): LengthAwarePaginator
+    public function getListings($filters = [], $perPage = 15): LengthAwarePaginator
     {
         return Listing::with(['user', 'store', 'category'])
+            ->filter($filters)
             ->latest()
             ->paginate($perPage);
     }

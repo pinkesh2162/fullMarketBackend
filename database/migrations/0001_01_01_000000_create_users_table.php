@@ -19,7 +19,7 @@ return new class extends Migration
             $table->string('password')->nullable();
             $table->string('phone')->nullable();
             $table->string('phone_code')->nullable();
-            $table->string('location')->nullable();
+            $table->json('location')->nullable();
             $table->text('description')->nullable();
             $table->string('lang')->default('en');
             $table->timestamp('email_verified_at')->nullable();

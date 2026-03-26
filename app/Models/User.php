@@ -36,7 +36,7 @@ class User extends Authenticatable implements HasMedia
     ];
 
     const PROFILE = 'user';
-    
+
     /**
      * The attributes that should be hidden for serialization.
      *
@@ -57,6 +57,7 @@ class User extends Authenticatable implements HasMedia
         return [
             'email_verified_at' => 'datetime',
             'password'          => 'hashed',
+            'location'          => 'array'
         ];
     }
 
@@ -66,7 +67,7 @@ class User extends Authenticatable implements HasMedia
         $media = $this->getMedia(self::PROFILE)->first();
         if (! empty($media)) {
             return $media->getFullUrl();
-        }   
+        }
 
         return getUserImageInitial($this->id, $this->name);
     }

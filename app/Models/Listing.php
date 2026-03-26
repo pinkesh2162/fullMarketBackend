@@ -88,4 +88,17 @@ class Listing extends Model implements HasMedia
         }
         return [];
     }
+
+    public function scopeFilter($query, array $filters)
+    {
+        $query->when($filters['category'] ?? false, function ($q, $category) {
+            $q->whereHas('category', function ($query) use ($category) {
+                $query->where('name', 'like', "%{$category}%");
+            });
+        });
+
+        $query->when($filters['location'] ?? false, function ($q, $location) {
+            $q->where('additional_info->location->address', 'like', "%{$location}%");
+        });
+    }
 }

@@ -34,8 +34,9 @@ class ListingController extends Controller
     public function index(Request $request): JsonResponse
     {
         $perPage = @$request->perPage ?? 15;
+        $filters = $request->only(['category', 'location']);
         
-        $listings = $this->listingRepo->getListings($perPage);
+        $listings = $this->listingRepo->getListings($filters, $perPage);
         
         return $this->actionSuccess('Listings fetched successfully', ListingResource::collection($listings));
     }

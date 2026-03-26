@@ -28,7 +28,7 @@ class EditProfileRequest extends FormRequest
             'email' => 'nullable|email|max:255|unique:users,email,' . $this->user()->id,
             'phone' => 'nullable|string|max:20',
             'phone_code' => 'nullable|string|max:10',
-            'location' => 'nullable|string|max:255',
+            'location' => 'nullable|array',
             'description' => 'nullable|string',
             'file' => 'nullable|image|max:5120',
         ];

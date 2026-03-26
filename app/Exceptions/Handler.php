@@ -35,7 +35,7 @@ class Handler extends ExceptionHandler
         $this->renderable(function (\Illuminate\Database\Eloquent\ModelNotFoundException $e, \Illuminate\Http\Request $request) {
             if ($request->expectsJson() || $request->is('api/*')) {
                 $message = $e->getMessage();
-                
+
                 if (preg_match('@\\\\(\w+)\]@', $message, $matches)) {
                     $model = preg_replace('/Table/i', '', $matches[1]);
                     $message = "{$model} not found.";

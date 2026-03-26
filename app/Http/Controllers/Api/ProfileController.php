@@ -34,7 +34,7 @@ class ProfileController extends Controller
     public function getProfile(Request $request)
     {
         $user = UserResource::make($request->user());
-        
+
         return $this->actionSuccess('User profile retrieved successfully', $user);
     }
 

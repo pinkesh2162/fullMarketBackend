@@ -23,6 +23,7 @@ class Store extends Model implements HasMedia
     ];
 
     protected $casts = [
+        'location' => 'array',
         'business_time' => 'array',
         'contact_information' => 'array',
         'social_media' => 'array',

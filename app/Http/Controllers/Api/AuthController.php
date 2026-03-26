@@ -88,14 +88,14 @@ class AuthController extends Controller
     public function forgotPassword(Request $request)
     {
         $request->validate(['email' => 'required|email']);
-        
+
         $user = $this->userRepo->findByEmail($request->email);
         if (!$user) {
             return $this->notFound('Email not found.');
         }
 
         $otp = rand(100000, 999999);
-        
+
         DB::table('password_reset_tokens')->updateOrInsert(
             ['email' => $user->email],
             ['token' => $otp, 'created_at' => now()]
@@ -120,7 +120,7 @@ class AuthController extends Controller
         ]);
 
         $this->userRepo->handleResetPassword($request);
-        
+
         return $this->actionSuccess('Password has been reset successfully.');
     }
 

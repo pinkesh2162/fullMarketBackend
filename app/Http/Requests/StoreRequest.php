@@ -53,8 +53,8 @@ class StoreRequest extends FormRequest
     {
         return [
             'name' => 'sometimes|required|string|max:255',
-            'location' => 'nullable|string|max:500',
-            
+            'location' => 'nullable|array',
+
             'business_time' => 'nullable|array',
             'business_time.is_flexible' => 'nullable|boolean',
             'business_time.working_hour' => 'nullable|array',
@@ -69,10 +69,10 @@ class StoreRequest extends FormRequest
             'contact_information.phone_code' => 'nullable|string',
             'contact_information.whatsapp_phone' => 'nullable|string',
             'contact_information.whatsapp_code' => 'nullable|string',
-            
+
             'social_media' => 'nullable|array',
             'social_media.*' => 'nullable|string', // Allow any string url
-            
+
             'cover_photo' => 'nullable|image|max:5120',
             'logo' => 'nullable|image|max:2048',
         ];
