@@ -5,25 +5,22 @@ namespace App\Mail;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
-use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class ForgotPasswordMail extends Mailable
+class ClaimMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public $email;
-    public $resetLink;
+    public $claim;
 
     /**
      * Create a new message instance.
      */
-    public function __construct($email, $resetLink)
+    public function __construct($claim)
     {
-        $this->email = $email;
-        $this->resetLink = $resetLink;
+        $this->claim = $claim;
     }
 
     /**
@@ -31,8 +28,9 @@ class ForgotPasswordMail extends Mailable
      */
     public function envelope(): Envelope
     {
+        $type = $this->claim->claim_type ? 'Claim' : 'Remove Ad';
         return new Envelope(
-            subject: 'Reset Your Password - FullMarket',
+            subject: "New {$type} Request - #{$this->claim->id}",
         );
     }
 
@@ -42,14 +40,14 @@ class ForgotPasswordMail extends Mailable
     public function content(): Content
     {
         return new Content(
-            view: 'emails.auth.forgot-password',
+            view: 'emails.claim_notification',
         );
     }
 
     /**
      * Get the attachments for the message.
      *
-     * @return array<int, Attachment>
+     * @return array<int, \Illuminate\Mail\Mailables\Attachment>
      */
     public function attachments(): array
     {

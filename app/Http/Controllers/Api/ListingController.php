@@ -61,8 +61,9 @@ class ListingController extends Controller
     public function getFeaturedListings(Request $request): JsonResponse
     {
         $perPage = @$request->perPage ?? 3;
+        $filters = $request->only(['category', 'location']);
         
-        $listings = $this->listingRepo->getFeaturedListings($perPage);
+        $listings = $this->listingRepo->getFeaturedListings($filters, $perPage);
         
         return $this->actionSuccess('Featured listings fetched successfully', ListingResource::collection($listings));
     }

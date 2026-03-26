@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\StoreController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ListingController;
 use App\Http\Controllers\Api\FavoriteController;
+use App\Http\Controllers\Api\ClaimController;
 
 //guest routes
 Route::post('/register', [AuthController::class, 'register']);
@@ -19,10 +20,11 @@ Route::post('/auth/{provider}/callback', [SocialAuthController::class, 'handlePr
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/listings', [ListingController::class, 'index']);
 Route::get('/featured-listings', [ListingController::class, 'getFeaturedListings']);
+Route::post('/claim-add', [ClaimController::class, 'store']);
 
 
 Route::middleware(['auth:sanctum'])->group(function () {
-//    user profile route
+    //    user profile route
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/get-profile', [ProfileController::class, 'getProfile']);
     Route::post('/edit-profile', [ProfileController::class, 'updateProfile']);

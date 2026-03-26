@@ -94,16 +94,18 @@ class AuthController extends Controller
             return $this->notFound('Email not found.');
         }
 
-        $otp = rand(100000, 999999);
+        $token = \Illuminate\Support\Str::random(60);
 
         DB::table('password_reset_tokens')->updateOrInsert(
             ['email' => $user->email],
-            ['token' => $otp, 'created_at' => now()]
+            ['token' => Hash::make($token), 'created_at' => now()]
         );
 
-        Mail::to($user->email)->send(new ForgotPasswordMail($otp));
+        $resetLink = env('FRONTEND_URL', 'http://localhost:3000') . '/reset-password?token=' . $token . '&email=' . $user->email;
 
-        return $this->actionSuccess('Password reset OTP sent to your email.');
+        Mail::to($user->email)->send(new ForgotPasswordMail($user->email, $resetLink));
+
+        return $this->actionSuccess('Password reset link sent to your email.');
     }
 
     /**
@@ -115,7 +117,7 @@ class AuthController extends Controller
     {
         $request->validate([
             'email' => 'required|email',
-            'otp' => 'required|numeric',
+            'token' => 'required|string',
             'password' => 'required|string|min:8|confirmed',
         ]);
 

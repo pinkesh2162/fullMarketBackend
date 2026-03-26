@@ -16,10 +16,11 @@ class ListingRepository
             ->paginate($perPage);
     }
 
-    public function getFeaturedListings($perPage = 3): LengthAwarePaginator
+    public function getFeaturedListings($filters = [],$perPage = 3): LengthAwarePaginator
     {
         return Listing::with(['user', 'store', 'category'])
             ->orderByDesc('views_count')
+             ->filter($filters)
             ->latest()
             ->paginate($perPage);
     }

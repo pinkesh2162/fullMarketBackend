@@ -159,11 +159,15 @@ class UserRepository
         
         $reset = DB::table('password_reset_tokens')
             ->where('email', $request->email)
-            ->where('token', $request->otp)
             ->first();
 
-        if (!$reset) {
-            throw new ApiOperationFailedException('Invalid or expired OTP.', 400);
+        if (!$reset || !Hash::check($request->token, $reset->token)) {
+            throw new ApiOperationFailedException('Invalid or expired password reset token.', 400);
+        }
+
+        if (\Carbon\Carbon::parse($reset->created_at)->addMinutes(30)->isPast()) {
+            DB::table('password_reset_tokens')->where('email', $request->email)->delete();
+            throw new ApiOperationFailedException('Password reset token has expired.', 400);
         }
 
         $user = $this->findByEmail($request->email);
