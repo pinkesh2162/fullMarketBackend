@@ -34,7 +34,10 @@ class ListingController extends Controller
     public function index(Request $request): JsonResponse
     {
         $perPage = @$request->perPage ?? 15;
-        $filters = $request->only(['category', 'location', 'lat', 'long', 'radius']);
+        $filters = $request->only(['category', 'location', 'lat', 'long', 'lng', 'radius']);
+        if (!isset($filters['long']) && isset($filters['lng'])) {
+            $filters['long'] = $filters['lng'];
+        }
 
         $listings = $this->listingRepo->getListings($filters, $perPage);
 
