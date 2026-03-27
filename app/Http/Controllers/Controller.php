@@ -45,7 +45,7 @@ class Controller extends BaseController
         return Response::json([
             // 'success' => false,
             'status' => self::HTTP_UNPROCESSABLE_ENTITY,
-            'message' => $message,
+            'message' => __($message),
             'errors' => $errors,
             // 'timestamp' => now()->toISOString(),
         ], self::HTTP_UNPROCESSABLE_ENTITY);
@@ -81,7 +81,7 @@ class Controller extends BaseController
         $response = [
             // 'success' => true,
             'status' => $statusCode,
-            'message' => $message,
+            'message' => __($message),
             // 'timestamp' => now()->toISOString(),
         ];
 
@@ -104,7 +104,7 @@ class Controller extends BaseController
         $response = [
             // 'success' => false,
             'status' => $statusCode,
-            'message' => $message,
+            'message' => __($message),
             // 'timestamp' => now()->toISOString(),
         ];
 
@@ -130,7 +130,7 @@ class Controller extends BaseController
             'success' => $code >= 200 && $code < 300,
             'status' => $code,
             'data' => $result,
-            'message' => $message,
+            'message' => __($message),
             // 'timestamp' => now()->toISOString(),
         ], $code);
     }

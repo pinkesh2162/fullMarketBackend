@@ -26,11 +26,7 @@ class ContactController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
+            return $this->validationFailed('Validation failed', $validator->errors());
         }
 
         $data = $request->only('name', 'email', 'subject', 'message');
@@ -39,16 +35,9 @@ class ContactController extends Controller
             // Send email to the support address
             Mail::to(config('app.admin_email'))->send(new ContactMail($data));
 
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Your message has been sent successfully.'
-            ], 200);
+            return $this->actionSuccess('Your message has been sent successfully.');
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Failed to send message. Please try again later.',
-                'error' => $e->getMessage()
-            ], 500);
+            return $this->serverError('Failed to send message. Please try again later.', ['error' => $e->getMessage()]);
         }
     }
 }

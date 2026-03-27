@@ -27,7 +27,7 @@ class Handler extends ExceptionHandler
             if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Unauthenticated.',
+                    'message' => __('Unauthenticated.'),
                 ], \Symfony\Component\HttpFoundation\Response::HTTP_UNAUTHORIZED);
             }
         });
@@ -43,7 +43,7 @@ class Handler extends ExceptionHandler
 
                 return response()->json([
                     'success' => false,
-                    'message' => $message,
+                    'message' => __($message),
                 ], \Symfony\Component\HttpFoundation\Response::HTTP_NOT_FOUND);
             }
         });
@@ -54,7 +54,7 @@ class Handler extends ExceptionHandler
             if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json([
                     'success' => false,
-                    'message' => $message,
+                    'message' => __($message),
                 ], \Symfony\Component\HttpFoundation\Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
@@ -75,7 +75,7 @@ class Handler extends ExceptionHandler
 
                 return response()->json([
                     'success' => false,
-                    'message' => empty($e->getMessage()) ? 'Server Error' : $e->getMessage(),
+                    'message' => empty($e->getMessage()) ? __('Server Error') : __($e->getMessage()),
                 ], $code);
             }
         });
