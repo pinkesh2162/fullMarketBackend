@@ -38,6 +38,6 @@ class ClaimController extends Controller
 
         $this->claimRepo->createClaim($data, $request->file('images'));
 
-        return $this->actionSuccess('Your request has been submitted successfully.');
+        return $this->actionSuccess('request_submitted');
     }
 }

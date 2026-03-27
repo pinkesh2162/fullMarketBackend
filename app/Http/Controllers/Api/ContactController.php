@@ -18,26 +18,20 @@ class ContactController extends Controller
      */
     public function send(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        $data = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|max:255',
             'subject' => 'required|string|max:255',
             'message' => 'required|string',
         ]);
 
-        if ($validator->fails()) {
-            return $this->validationFailed('Validation failed', $validator->errors());
-        }
-
-        $data = $request->only('name', 'email', 'subject', 'message');
-
         try {
             // Send email to the support address
             Mail::to(config('app.admin_email'))->send(new ContactMail($data));
 
-            return $this->actionSuccess('Your message has been sent successfully.');
+            return $this->actionSuccess('request_submitted');
         } catch (\Exception $e) {
-            return $this->serverError('Failed to send message. Please try again later.', ['error' => $e->getMessage()]);
+            return $this->serverError('contact_send_failed', ['error' => $e->getMessage()]);
         }
     }
 }

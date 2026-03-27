@@ -38,7 +38,7 @@ class ListingController extends Controller
 
         $listings = $this->listingRepo->getListings($filters, $perPage);
 
-        return $this->actionSuccess('Listings fetched successfully', ListingResource::collection($listings));
+        return $this->actionSuccess('listings_fetched', ListingResource::collection($listings));
     }
 
     /**
@@ -51,7 +51,7 @@ class ListingController extends Controller
 
         $listings = $this->listingRepo->getMyListings($perPage);
 
-        return $this->actionSuccess('Listings fetched successfully', ListingResource::collection($listings));
+        return $this->actionSuccess('listings_fetched', ListingResource::collection($listings));
     }
 
     /**
@@ -65,7 +65,7 @@ class ListingController extends Controller
 
         $listings = $this->listingRepo->getFeaturedListings($filters, $perPage);
 
-        return $this->actionSuccess('Featured listings fetched successfully', ListingResource::collection($listings));
+        return $this->actionSuccess('featured_listings_fetched', ListingResource::collection($listings));
     }
 
 
@@ -81,33 +81,33 @@ class ListingController extends Controller
 
         $this->listingRepo->createListing($data, $request->file('images'));
 
-        return $this->actionSuccess('Listing created successfully');
+        return $this->actionSuccess('listing_created');
     }
 
     public function show(Listing $listing): JsonResponse
     {
         $listing->load(['user', 'store', 'category']);
-        return $this->actionSuccess('Listing fetched successfully', new ListingResource($listing));
+        return $this->actionSuccess('listing_fetched', new ListingResource($listing));
     }
 
     public function update(UpdateListingRequest $request, Listing $listing): JsonResponse
     {
         if ($listing->user_id !== auth()->id()) {
-            return $this->forbidden('You can only update your own listing.');
+            return $this->forbidden('listing_update_unauthorized');
         }
 
         $listing = $this->listingRepo->updateListing($listing, $request->validated(), $request->file('images'));
-        return $this->actionSuccess('Listing updated successfully', new ListingResource($listing));
+        return $this->actionSuccess('listing_updated', new ListingResource($listing));
     }
 
     public function destroy(Listing $listing): JsonResponse
     {
         if ($listing->user_id !== auth()->id()) {
-            return $this->forbidden('You can only delete your own listing.');
+            return $this->forbidden('listing_delete_unauthorized');
         }
 
         $this->listingRepo->deleteListing($listing);
-        return $this->actionSuccess('Listing deleted successfully');
+        return $this->actionSuccess('listing_deleted');
     }
 
     /**
@@ -119,6 +119,6 @@ class ListingController extends Controller
     {
         $perPage = @$request->perPage ?? 6;
         $listings = $this->listingRepo->getRelatedListings($listing, $perPage);
-        return $this->actionSuccess('Related listings fetched successfully', ListingResource::collection($listings));
+        return $this->actionSuccess('related_listings_fetched', ListingResource::collection($listings));
     }
 }

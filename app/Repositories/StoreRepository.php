@@ -67,7 +67,7 @@ class StoreRepository
             $store = Store::where('user_id', $userId)->first();
             
             if (!$store) {
-                throw new ApiOperationFailedException('Store not found', 404);
+                throw new ApiOperationFailedException('store_not_found', 404);
             }
 
             // Spatie Media Library handles deleting attached media automatically 
@@ -80,7 +80,7 @@ class StoreRepository
             if ($e instanceof ApiOperationFailedException) {
                 throw $e;
             }
-            throw new ApiOperationFailedException('Failed to delete store', 500);
+            throw new ApiOperationFailedException('store_delete_failed', 500);
         }
     }
 }

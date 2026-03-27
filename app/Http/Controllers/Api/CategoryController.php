@@ -18,7 +18,7 @@ class CategoryController extends Controller
         $categories = Category::with('subCategories.subCategories')
             ->whereNull('parent_id')->get();
         
-        return $this->actionSuccess('Categories fetched successfully', CategoryResource::collection($categories));
+        return $this->actionSuccess('categories_fetched', CategoryResource::collection($categories));
     }
 
     /**
@@ -39,6 +39,6 @@ class CategoryController extends Controller
 
         $category->load('subCategories');
 
-        return $this->actionSuccess('Category created successfully', new CategoryResource($category), self::HTTP_CREATED);
+        return $this->actionSuccess('category_created', new CategoryResource($category), self::HTTP_CREATED);
     }
 }

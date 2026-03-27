@@ -40,7 +40,7 @@ class ApiOperationFailedException extends Exception
         if ($request->expectsJson() || $request->is('api/*')) {
             $response = [
                 'success' => false,
-                'message' => $this->getMessage(),
+                'message' => __($this->getMessage()),
             ];
 
             if (!empty($this->data)) {

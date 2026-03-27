@@ -18,7 +18,7 @@ class FavoriteController extends Controller
         $perPage = @$request->perPage ?? 15;
         $favorites = $request->user()->favoriteListings()->latest('favorites.created_at')->paginate($perPage);
         
-        return $this->actionSuccess('Favorites fetched successfully', ListingResource::collection($favorites));
+        return $this->actionSuccess('favorites_fetched', ListingResource::collection($favorites));
     }
 
     /**
@@ -31,7 +31,7 @@ class FavoriteController extends Controller
             $user->favoriteListings()->attach($listing->id);
         }
         
-        return $this->actionSuccess('Listing added to favorites successfully', null, self::HTTP_CREATED);
+        return $this->actionSuccess('favorite_added', null, self::HTTP_CREATED);
     }
 
     /**
@@ -44,6 +44,6 @@ class FavoriteController extends Controller
             $user->favoriteListings()->detach($listing->id);
         }
         
-        return $this->actionSuccess('Listing removed from favorites successfully');
+        return $this->actionSuccess('favorite_removed');
     }
 }

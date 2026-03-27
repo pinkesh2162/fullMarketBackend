@@ -57,7 +57,7 @@ class AuthController extends Controller
 
         $data = $this->userRepo->verifyOtp($request->email, $request->otp);
 
-        return $this->actionSuccess('Email verified successfully.', $data);
+        return $this->actionSuccess('email_verified', $data);
     }
 
     /**
@@ -70,7 +70,7 @@ class AuthController extends Controller
 
         $this->userRepo->resendOtp($request->email);
 
-        return $this->actionSuccess('Verification OTP has been resent.');
+        return $this->actionSuccess('otp_resent');
     }
 
     /**
@@ -87,16 +87,16 @@ class AuthController extends Controller
         $user = $this->userRepo->findByEmail($request->email);
 
         if (!$user || !Hash::check($request->password, $user->password)) {
-            return $this->actionFailure('The provided credentials are incorrect.', null, self::HTTP_UNPROCESSABLE_ENTITY);
+            return $this->actionFailure('invalid_credentials', null, self::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         if (!$user->email_verified_at) {
-            return $this->actionFailure('OTP is not verified.', null, 403);
+            return $this->actionFailure('otp_not_verified', null, 403);
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return $this->actionSuccess('Logged in successfully', [
+        return $this->actionSuccess('login_success', [
             'user' => $user,
             'token' => $token,
         ]);
@@ -110,7 +110,7 @@ class AuthController extends Controller
     {
         $request->user()->currentAccessToken()->delete();
 
-        return $this->actionSuccess('Logged out successfully');
+        return $this->actionSuccess('logout_success');
     }
 
     /**
@@ -123,7 +123,7 @@ class AuthController extends Controller
 
         $user = $this->userRepo->findByEmail($request->email);
         if (!$user) {
-            return $this->notFound('Email not found.');
+            return $this->notFound('email_not_found');
         }
 
         $token = \Illuminate\Support\Str::random(60);
@@ -137,7 +137,7 @@ class AuthController extends Controller
 
         Mail::to($user->email)->send(new ForgotPasswordMail($user->email, $resetLink));
 
-        return $this->actionSuccess('Password reset link sent to your email.');
+        return $this->actionSuccess('password_reset_link_sent');
     }
 
     /**
@@ -155,7 +155,7 @@ class AuthController extends Controller
 
         $this->userRepo->handleResetPassword($request);
 
-        return $this->actionSuccess('Password has been reset successfully.');
+        return $this->actionSuccess('password_reset_success');
     }
 
     /**
@@ -172,11 +172,11 @@ class AuthController extends Controller
         $user = $request->user();
 
         if (!Hash::check($request->current_password, $user->password)) {
-            return $this->actionFailure('Current password does not match.', null, self::HTTP_BAD_REQUEST);
+            return $this->actionFailure('current_password_invalid', null, self::HTTP_BAD_REQUEST);
         }
 
         $user->update(['password' => Hash::make($request->password)]);
 
-        return $this->actionSuccess('Password changed successfully.');
+        return $this->actionSuccess('password_changed_success');
     }
 }

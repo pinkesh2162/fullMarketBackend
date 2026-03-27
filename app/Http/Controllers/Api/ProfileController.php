@@ -35,7 +35,7 @@ class ProfileController extends Controller
     {
         $user = UserResource::make($request->user());
 
-        return $this->actionSuccess('User profile retrieved successfully', $user);
+        return $this->actionSuccess('profile_retrieved', $user);
     }
 
     /**
@@ -53,7 +53,7 @@ class ProfileController extends Controller
 
         $user = $this->userRepo->updateProfile($request->user(), $validatedData);
 
-        return $this->actionSuccess('Profile updated successfully.', ['user' => $user]);
+        return $this->actionSuccess('profile_updated', ['user' => $user]);
     }
 
     /**
@@ -66,6 +66,6 @@ class ProfileController extends Controller
     {
         $this->userRepo->deleteUserAccount($request->user());
 
-        return $this->actionSuccess('Your account and all associated data have been permanently deleted.');
+        return $this->actionSuccess('account_deleted');
     }
 }

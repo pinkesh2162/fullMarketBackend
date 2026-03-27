@@ -66,7 +66,7 @@ class UserRepository
 
             return [
                 'user' => $user,
-                'message' => 'Registration successful. Please verify your email with the OTP sent.',
+                'message' => 'registration_success',
             ];
         } catch (\Exception $e) {
             throw new ApiOperationFailedException($e->getMessage(), 422);
@@ -170,17 +170,17 @@ class UserRepository
             ->first();
 
         if (!$reset || !Hash::check($request->token, $reset->token)) {
-            throw new ApiOperationFailedException('Invalid or expired password reset token.', 400);
+            throw new ApiOperationFailedException('invalid_reset_token', 400);
         }
 
         if (\Carbon\Carbon::parse($reset->created_at)->addMinutes(30)->isPast()) {
             DB::table('password_reset_tokens')->where('email', $request->email)->delete();
-            throw new ApiOperationFailedException('Password reset token has expired.', 400);
+            throw new ApiOperationFailedException('reset_token_expired', 400);
         }
 
         $user = $this->findByEmail($request->email);
         if (!$user) {
-            throw new ApiOperationFailedException('User not found.', 404);
+            throw new ApiOperationFailedException('user_not_found', 404);
         }
 
         $user->update(['password' => Hash::make($request->password)]);
@@ -192,19 +192,19 @@ class UserRepository
         $user = $this->findByEmail($email);
 
         if (!$user) {
-            throw new ApiOperationFailedException('User not found.', 404);
+            throw new ApiOperationFailedException('user_not_found', 404);
         }
 
         if ($user->email_verified_at) {
-            throw new ApiOperationFailedException('Email already verified.', 400);
+            throw new ApiOperationFailedException('email_already_verified', 400);
         }
 
         if ($user->otp !== $otp) {
-            throw new ApiOperationFailedException('Invalid OTP.', 400);
+            throw new ApiOperationFailedException('invalid_otp', 400);
         }
 
         if (now()->isAfter($user->otp_expires_at)) {
-            throw new ApiOperationFailedException('OTP has expired.', 400);
+            throw new ApiOperationFailedException('otp_expired', 400);
         }
 
         $user->update([
@@ -223,11 +223,11 @@ class UserRepository
         $user = $this->findByEmail($email);
 
         if (!$user) {
-            throw new ApiOperationFailedException('User not found.', 404);
+            throw new ApiOperationFailedException('user_not_found', 404);
         }
 
         if ($user->email_verified_at) {
-            throw new ApiOperationFailedException('Email already verified.', 400);
+            throw new ApiOperationFailedException('email_already_verified', 400);
         }
 
         $otp = rand(100000, 999999);

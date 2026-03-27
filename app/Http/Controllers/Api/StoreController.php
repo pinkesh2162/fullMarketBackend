@@ -26,10 +26,10 @@ class StoreController extends Controller
         $store = Store::where('user_id', auth()->id())->first();
 
         if (!$store) {
-            return $this->notFound('Store not found');
+            return $this->notFound('store_not_found');
         }
 
-        return $this->actionSuccess('Store fetched successfully', new StoreResource($store));
+        return $this->actionSuccess('store_fetched', new StoreResource($store));
     }
 
     /**
@@ -39,7 +39,7 @@ class StoreController extends Controller
     {
         $store = $this->storeRepository->updateStore(auth()->id(), $request->validated());
 
-        return $this->actionSuccess('Store updated successfully', new StoreResource($store));
+        return $this->actionSuccess('store_updated', new StoreResource($store));
     }
 
     /**
@@ -49,6 +49,6 @@ class StoreController extends Controller
     {
         $this->storeRepository->deleteStore(auth()->id());
 
-        return $this->actionSuccess('Store deleted successfully');
+        return $this->actionSuccess('store_deleted');
     }
 }
