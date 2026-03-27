@@ -89,7 +89,10 @@ class ListingController extends Controller
 
     public function show(Listing $listing): JsonResponse
     {
-        $listing->load(['user', 'store', 'category']);
+        if ($listing->user_id !== auth()->id()) {
+            $this->listingRepo->incrementViews($listing);
+        }
+        $listing->with(['user', 'store', 'category']);
         return $this->actionSuccess('listing_fetched', new ListingResource($listing));
     }
 

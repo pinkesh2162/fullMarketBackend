@@ -81,4 +81,8 @@ class ListingRepository
             ->latest()
             ->paginate($perPage);
     }
+    public function incrementViews(Listing $listing): bool
+    {
+        return $listing->increment('views_count');
+    }
 }

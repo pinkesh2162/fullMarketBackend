@@ -22,6 +22,7 @@ Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
 Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 // Route::get('/auth/google/redirect', [SocialAuthController::class, 'redirectToGoogle']);
 Route::post('/auth/{provider}/callback', [SocialAuthController::class, 'handleProviderCallback']);
+Route::get('/main-categories', [CategoryController::class, 'getMainCategories']);
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/listings', [ListingController::class, 'index']);
 Route::get('/featured-listings', [ListingController::class, 'getFeaturedListings']);

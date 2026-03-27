@@ -17,8 +17,18 @@ class CategoryController extends Controller
     {
         $categories = Category::with('subCategories.subCategories')
             ->whereNull('parent_id')->get();
-        
+
         return $this->actionSuccess('categories_fetched', CategoryResource::collection($categories));
+    }
+
+    /**
+     * Display a listing of categories.
+     */
+    public function getMainCategories(): JsonResponse
+    {
+        $categories = Category::toBase()->whereNull('parent_id')->select('id', 'name')->get();
+
+        return $this->actionSuccess('categories_fetched', $categories);
     }
 
     /**
@@ -33,8 +43,10 @@ class CategoryController extends Controller
         ]);
 
         if (isset($request->image) && $request->image instanceof \Illuminate\Http\UploadedFile) {
-            $category->addMedia($request->image)->toMediaCollection(Category::CATEGORY_IMAGE,
-                config('app.media_disc', 'public'));
+            $category->addMedia($request->image)->toMediaCollection(
+                Category::CATEGORY_IMAGE,
+                config('app.media_disc', 'public')
+            );
         }
 
         $category->load('subCategories');
