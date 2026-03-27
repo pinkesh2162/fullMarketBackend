@@ -21,8 +21,8 @@ class CategoryResource extends JsonResource
             'parent_id' => $this->parent_id,
             'image' => $this->categoryImage,
             'sub_categories' => CategoryResource::collection($this->whenLoaded('subCategories')),
-            'created_at' => $this->created_at,
-            'updated_at' => $this->updated_at,
+            // 'created_at' => $this->created_at,
+            // 'updated_at' => $this->updated_at,
         ];
     }
 }

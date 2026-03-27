@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Http\Requests\StoreCategoryRequest;
 use App\Http\Resources\CategoryResource;
+use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
 class CategoryController extends Controller
@@ -13,10 +14,14 @@ class CategoryController extends Controller
     /**
      * Display a listing of categories.
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         $categories = Category::with('subCategories.subCategories')
-            ->whereNull('parent_id')->get();
+            ->whereNull('parent_id')
+            ->where(function ($query) {
+                $query->whereNull('user_id')
+                    ->orWhere('user_id', auth('sanctum')->id());
+            })->get();
 
         return $this->actionSuccess('categories_fetched', CategoryResource::collection($categories));
     }
@@ -26,7 +31,13 @@ class CategoryController extends Controller
      */
     public function getMainCategories(): JsonResponse
     {
-        $categories = Category::toBase()->whereNull('parent_id')->select('id', 'name')->get();
+        $categories = Category::toBase()
+            ->whereNull('parent_id')
+            ->where(function ($query) {
+                $query->whereNull('user_id')
+                    ->orWhere('user_id', auth('sanctum')->id());
+            })
+            ->select('id', 'name')->get();
 
         return $this->actionSuccess('categories_fetched', $categories);
     }
