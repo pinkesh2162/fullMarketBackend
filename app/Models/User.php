@@ -106,4 +106,11 @@ class User extends Authenticatable implements HasMedia
     {
         return $this->hasMany(Claim::class);
     }
+    /**
+     * Get the stores followed by the user.
+     */
+    public function followedStores()
+    {
+        return $this->belongsToMany(Store::class, 'follows', 'user_id', 'store_id')->withTimestamps();
+    }
 }

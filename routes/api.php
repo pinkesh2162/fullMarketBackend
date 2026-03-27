@@ -9,6 +9,8 @@ use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ListingController;
 use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\ClaimController;
+use App\Http\Controllers\Api\StoreFollowController;
+use App\Http\Controllers\Api\StoreRatingController;
 
 use App\Http\Controllers\Api\ContactController;
 
@@ -54,4 +56,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/store', [StoreController::class, 'show']);
     Route::post('/edit-store', [StoreController::class, 'update']);
     Route::post('/delete-store', [StoreController::class, 'destroy']);
+
+    // Store Follow and Rating routes
+    Route::post('/stores/{store}/follow', [StoreFollowController::class, 'follow']);
+    Route::post('/stores/{store}/unfollow', [StoreFollowController::class, 'unfollow']);
+    Route::post('/stores/{store}/rate', [StoreRatingController::class, 'rate']);
 });

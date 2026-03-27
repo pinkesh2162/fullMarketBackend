@@ -24,6 +24,10 @@ class StoreResource extends JsonResource
             'social_media' => $this->social_media,
             'cover_photo_url' => $this->cover_photo,
             'logo_url' => $this->profile_photo,
+            'followers_count' => $this->followers()->count(),
+            'is_followed' => auth('sanctum')->check() ? $this->followers()->where('user_id', auth('sanctum')->id())->exists() : false,
+            'average_rating' => (float) $this->average_rating,
+            'ratings_count' => $this->ratings_count,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

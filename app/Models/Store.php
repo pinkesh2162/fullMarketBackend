@@ -62,4 +62,29 @@ class Store extends Model implements HasMedia
         return getUserImageInitial($this->id, $this->name);
     }
     
+    /**
+     * Get the users that follow the store.
+     */
+    public function followers()
+    {
+        return $this->belongsToMany(User::class, 'follows', 'store_id', 'user_id')->withTimestamps();
+    }
+
+    /**
+     * Get the ratings for the store.
+     */
+    public function ratings()
+    {
+        return $this->hasMany(Rating::class);
+    }
+
+    public function getAverageRatingAttribute()
+    {
+        return (float) $this->ratings()->avg('rating') ?: 0;
+    }
+
+    public function getRatingsCountAttribute()
+    {
+        return $this->ratings()->count();
+    }
 }
