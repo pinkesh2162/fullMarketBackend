@@ -23,16 +23,18 @@
 
         <!-- App Download -->
         <h3 style="font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #333;">Download our app</h3>
-        <div style="margin-bottom: 20px;">
-            <a href="#" style="margin-right: 15px; text-decoration: none;">
-                <img src="https://textoverimage.moosend.com/v1/render?font=roboto&font_size=18&text=GET%20IT%20ON%20Google%20Play&text_color=ffffff&bg_color=000000&padding=10&radius=5" alt="Google Play" style="height: 48px;">
+        <div style="margin-bottom: 20px;display:flex;gap:20px">
+            <a href="https://play.google.com/store/apps/details?id=com.fullmarket&hl=en">
+                <img src="{{ asset('media/mail/google-pay.png') }}" alt="Google Play"
+                    style="display:block;height:auto;border:0;max-width:160px">
             </a>
-            <a href="#" style="text-decoration: none;">
-                <img src="https://textoverimage.moosend.com/v1/render?font=roboto&font_size=18&text=Download%20on%20App%20Store&text_color=ffffff&bg_color=000000&padding=10&radius=5" alt="App Store" style="height: 48px;">
+            <a href="https://apps.apple.com/us/app/fullmarket/id6502962551">
+                <img src="{{ asset('media/mail/apple-store.png') }}" alt="App Store"
+                    style="display:block;height:auto;border:0;max-width:160px">
             </a>
         </div>
     </div>
-    
+
     <!-- Footer -->
     <div style="padding: 15px 35px; border-top: 1px solid #eee; background-color: #fafafa;">
         <p style="color: #999; font-size: 12px; margin: 0;">© FullMarket</p>
