@@ -56,7 +56,9 @@ return [
     */
 
     'url' => env('APP_URL', 'http://localhost'),
+    'frontend_url' => env('FRONTEND_URL', 'http://localhost'),
     'media_disc' => env('MEDIA_DISK', 'public'),
+    'admin_email' => env('ADMIN_EMAIL'),
     'asset_url' => env('ASSET_URL'),
 
     /*

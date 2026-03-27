@@ -10,7 +10,10 @@ use App\Http\Controllers\Api\ListingController;
 use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\ClaimController;
 
+use App\Http\Controllers\Api\ContactController;
+
 //guest routes
+Route::post('/contact', [ContactController::class, 'send']);
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/verify-email', [AuthController::class, 'verifyEmail']);
