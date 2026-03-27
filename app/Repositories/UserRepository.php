@@ -3,6 +3,7 @@
 namespace App\Repositories;
 
 use App\Exceptions\ApiOperationFailedException;
+use App\Http\Resources\UserResource;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -114,6 +115,82 @@ class UserRepository
     }
 
     /**
+     * @param string $provider
+     * @param array $appSocialUser
+     * @return User
+     */
+    public function handleAppSocialLogin(string $provider, array $appSocialUser)
+    {
+        $userInfo = $appSocialUser['userInfo'] ?? [];
+        $providerId = $userInfo['sub'] ?? null;
+        $email = $userInfo['email'] ?? null;
+
+        $user = User::where('provider', $provider)->where('provider_id', $providerId)->first();
+
+        if (!$user && $email) {
+            $user = User::where('email', $email)->first();
+            if ($user) {
+                // Link account
+                $user->update([
+                    'provider' => $provider,
+                    'provider_id' => $providerId,
+                ]);
+            }
+        }
+
+        if (!$user) {
+            $firstName = $userInfo['givenName'] ?? null;
+            $lastName = null;
+            
+            $name = $userInfo['name'] ?? null;
+            $nickname = $userInfo['nickname'] ?? null;
+
+            // If name is present but looks like an email, try to use nickname or part of email
+            if ($name && filter_var($name, FILTER_VALIDATE_EMAIL)) {
+                $name = $nickname ?: Str::before($name, '@');
+            }
+
+            if (!$firstName) {
+                if ($name) {
+                    $parts = explode(' ', trim($name), 2);
+                    $firstName = $parts[0];
+                    $lastName = $parts[1] ?? null;
+                } else {
+                    $firstName = $nickname ?: 'User';
+                }
+            } else if ($name && $firstName) {
+                $lastName = trim(str_replace($firstName, '', $name));
+                if (empty($lastName)) $lastName = null;
+            }
+
+            $user = $this->create([
+                'first_name' => $firstName,
+                'last_name' => $lastName,
+                'email' => $email,
+                'provider' => $provider,
+                'provider_id' => $providerId,
+                'password' => Hash::make(Str::random(24)),
+                'email_verified_at' => ($userInfo['emailVerified'] ?? false) ? now() : null,
+            ]);
+        }
+
+        // Handle profile picture from URL if provided and user doesn't have one or it changed
+        if (isset($userInfo['picture']) && !empty($userInfo['picture'])) {
+            // We can optionally check if media collection is empty or if we want to update it
+            if ($user->getMedia(User::PROFILE)->isEmpty()) {
+                try {
+                    $user->addMediaFromUrl($userInfo['picture'])->toMediaCollection(User::PROFILE, config('app.media_disc', 'public'));
+                } catch (\Exception $e) {
+                    // Log error or ignore if image download fails
+                    \Illuminate\Support\Facades\Log::error("Failed to download social profile picture: " . $e->getMessage());
+                }
+            }
+        }
+
+        return $user;
+    }
+
+    /**
      * @param $provider
      * @param $socialUser
      *
@@ -215,7 +292,7 @@ class UserRepository
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return ['user' => $user, 'token' => $token];
+        return ['user' => UserResource::make($user), 'token' => $token];
     }
 
     public function resendOtp($email)
