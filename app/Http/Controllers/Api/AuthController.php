@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\ForgotPasswordMail;
+use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 
 class AuthController extends Controller
 {
@@ -28,6 +30,40 @@ class AuthController extends Controller
     public function __construct(UserRepository $userRepository)
     {
         $this->userRepo = $userRepository;
+    }
+
+
+    /**
+     * @param  Request  $request
+     * @return JsonResponse
+     */
+    public function login(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|string|email',
+            'password' => 'required|string',
+        ]);
+
+        $user = Cache::remember("user_{$request->email}", 60, function () use ($request) {
+            return User::with('media')
+                ->where('email', $request->email)
+                ->first();
+        });
+
+        if (!$user || !Hash::check($request->password, $user->password)) {
+            return $this->actionFailure('invalid_credentials', null, self::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        if (!$user->email_verified_at) {
+            return $this->actionFailure('otp_not_verified', null, 403);
+        }
+
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        return $this->actionSuccess('login_success', [
+            'user' => UserResource::make($user),
+            'token' => $token,
+        ]);
     }
 
     /**
@@ -72,35 +108,6 @@ class AuthController extends Controller
         $this->userRepo->resendOtp($request->email);
 
         return $this->actionSuccess('otp_resent');
-    }
-
-    /**
-     * @param  Request  $request
-     * @return JsonResponse
-     */
-    public function login(Request $request)
-    {
-        $request->validate([
-            'email' => 'required|string|email',
-            'password' => 'required|string',
-        ]);
-
-        $user = $this->userRepo->findByEmail($request->email);
-
-        if (!$user || !Hash::check($request->password, $user->password)) {
-            return $this->actionFailure('invalid_credentials', null, self::HTTP_UNPROCESSABLE_ENTITY);
-        }
-
-        if (!$user->email_verified_at) {
-            return $this->actionFailure('otp_not_verified', null, 403);
-        }
-
-        $token = $user->createToken('auth_token')->plainTextToken;
-
-        return $this->actionSuccess('login_success', [
-            'user' => UserResource::make($user),
-            'token' => $token,
-        ]);
     }
 
     /**

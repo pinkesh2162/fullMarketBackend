@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Listing;
 use App\Http\Requests\StoreListingRequest;
 use App\Http\Requests\UpdateListingRequest;
+use App\Http\Resources\FeatureListingResource;
+use App\Http\Resources\FrontListingResource;
 use App\Http\Resources\ListingResource;
 use App\Repositories\ListingRepository;
 use Illuminate\Http\JsonResponse;
@@ -34,14 +36,19 @@ class ListingController extends Controller
     public function index(Request $request): JsonResponse
     {
         $perPage = @$request->perPage ?? 15;
-        $filters = $request->only(['category', 'location', 'lat', 'long', 'lng', 'radius']);
+        $filters = $request->only(['category', 'location', 'lat', 'long', 'lng', 'radius', 'hide_ads']);
         if (!isset($filters['long']) && isset($filters['lng'])) {
             $filters['long'] = $filters['lng'];
         }
 
         $listings = $this->listingRepo->getListings($filters, $perPage);
 
-        return $this->actionSuccess('listings_fetched', ListingResource::collection($listings));
+        return $this->actionSuccess(
+            'listings_fetched',
+            FrontListingResource::collection($listings),
+            self::HTTP_OK,
+            $this->customizingResponseData($listings)['pagination']
+        );
     }
 
     /**
@@ -54,7 +61,12 @@ class ListingController extends Controller
 
         $listings = $this->listingRepo->getMyListings($perPage);
 
-        return $this->actionSuccess('listings_fetched', ListingResource::collection($listings));
+        return $this->actionSuccess(
+            'listings_fetched',
+            ListingResource::collection($listings),
+            self::HTTP_OK,
+            $this->customizingResponseData($listings)['pagination']
+        );
     }
 
     /**
@@ -64,11 +76,16 @@ class ListingController extends Controller
     public function getFeaturedListings(Request $request): JsonResponse
     {
         $perPage = @$request->perPage ?? 3;
-        $filters = $request->only(['category', 'location', 'lat', 'long', 'radius']);
+        $filters = $request->only(['category', 'location', 'lat', 'long', 'radius', 'hide_ads']);
 
         $listings = $this->listingRepo->getFeaturedListings($filters, $perPage);
 
-        return $this->actionSuccess('featured_listings_fetched', ListingResource::collection($listings));
+        return $this->actionSuccess(
+            'featured_listings_fetched',
+            FeatureListingResource::collection($listings),
+            self::HTTP_OK,
+            $this->customizingResponseData($listings)['pagination']
+        );
     }
 
 

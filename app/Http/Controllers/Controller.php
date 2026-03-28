@@ -76,7 +76,7 @@ class Controller extends BaseController
      * @param  mixed  $data  Optional data to include in response
      * @param  int  $statusCode  HTTP status code (default: 200)
      */
-    public function actionSuccess(string $message, $data = null, int $statusCode = self::HTTP_OK): JsonResponse
+    public function actionSuccess(string $message, $data = null, int $statusCode = self::HTTP_OK, $meta = null): JsonResponse
     {
         $response = [
             // 'success' => true,
@@ -87,6 +87,10 @@ class Controller extends BaseController
 
         if ($data !== null) {
             $response['data'] = $data;
+        }
+
+        if ($meta !== null) {
+            $response['meta'] = $meta;
         }
 
         return Response::json($response, $statusCode);

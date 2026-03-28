@@ -68,4 +68,54 @@ class ProfileController extends Controller
 
         return $this->actionSuccess('account_deleted');
     }
+
+    /**
+     * Get the authenticated user's settings.
+     *
+     * @param  Request  $request
+     * @return JsonResponse
+     */
+    public function getSettings(Request $request): JsonResponse
+    {
+        $settings = $request->user()->settings()->firstOrCreate([]);
+
+        return $this->actionSuccess('settings_retrieved', $settings);
+    }
+
+    /**
+     * Update the authenticated user's settings.
+     *
+     * @param  Request  $request
+     * @return JsonResponse
+     */
+    public function updateSettings(Request $request): JsonResponse
+    {
+        $settings = $request->user()->settings()->updateOrCreate(
+            ['user_id' => $request->user()->id],
+            $request->only([
+                'hide_ads',
+                'notification_post',
+                'message_notification',
+                'business_create',
+                'follow_request'
+            ])
+        );
+
+        return $this->actionSuccess('settings_updated', $settings);
+    }
+
+    /**
+     * Toggle the authenticated user's hide_ads preference.
+     *
+     * @param  Request  $request
+     * @return JsonResponse
+     */
+    public function toggleHideAds(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $settings = $user->settings()->firstOrCreate([]);
+        $settings->update(['hide_ads' => !$settings->hide_ads]);
+
+        return $this->actionSuccess('preference_updated', ['hide_ads' => $settings->hide_ads]);
+    }
 }

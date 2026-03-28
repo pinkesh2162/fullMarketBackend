@@ -4,10 +4,13 @@ namespace App\Repositories;
 
 use App\Exceptions\ApiOperationFailedException;
 use App\Http\Resources\UserResource;
+use App\Mail\VerifyEmailMail;
+use App\Mail\WelcomeMail;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
 class UserRepository
@@ -46,29 +49,32 @@ class UserRepository
     public function registerUser($request)
     {
         try {
-            $data = $request->except('password');
-            $data['password'] = Hash::make($request->password);
+            return DB::transaction(function () use ($request) {
+                $data = $request->except('password');
+                $data['password'] = Hash::make($request->password);
 
-            if (@$data['name']) {
-                $parts = explode(' ', trim($data['name']), 2);
-                $data['first_name'] = $parts[0];
-                $data['last_name'] = $parts[1] ?? null;
-                unset($data['name']);
-            }
+                if (!empty($data['name'])) {
+                    [$first, $last] = array_pad(explode(' ', trim($data['name']), 2), 2, null);
+                    $data['first_name'] = $first;
+                    $data['last_name'] = $last;
+                    unset($data['name']);
+                }
 
-            $otp = rand(100000, 999999);
-            $data['otp'] = $otp;
-            $data['otp_expires_at'] = now()->addMinutes(10);
+                $otp = random_int(100000, 999999);
+                $data['otp'] = $otp;
+                $data['otp_expires_at'] = now()->addMinutes(10);
 
-            $user = $this->create($data);
+                $user = $this->create($data);
 
-            \Illuminate\Support\Facades\Mail::to($user->email)->send(new \App\Mail\WelcomeMail($user, $request->password));
-            \Illuminate\Support\Facades\Mail::to($user->email)->send(new \App\Mail\VerifyEmailMail($user->email, $otp));
+                // Dispatch emails to queue (NON-BLOCKING ⚡)
+                Mail::to($user->email)->queue(new WelcomeMail($user, $request->password));
+                Mail::to($user->email)->queue(new VerifyEmailMail($user->email, $otp));
 
-            return [
-                'user' => $user,
-                'message' => 'registration_success',
-            ];
+                return [
+                    'user' => $user,
+                    'message' => 'registration_success',
+                ];
+            });
         } catch (\Exception $e) {
             throw new ApiOperationFailedException($e->getMessage(), 422);
         }
@@ -125,10 +131,11 @@ class UserRepository
         $providerId = $userInfo['sub'] ?? null;
         $email = $userInfo['email'] ?? null;
 
-        $user = User::where('provider', $provider)->where('provider_id', $providerId)->first();
+        $user = User::with('media')->where('provider', $provider)
+            ->where('provider_id', $providerId)->first();
 
         if (!$user && $email) {
-            $user = User::where('email', $email)->first();
+            $user = User::with('media')->where('email', $email)->first();
             if ($user) {
                 // Link account
                 $user->update([
@@ -141,7 +148,7 @@ class UserRepository
         if (!$user) {
             $firstName = $userInfo['givenName'] ?? null;
             $lastName = null;
-            
+
             $name = $userInfo['name'] ?? null;
             $nickname = $userInfo['nickname'] ?? null;
 
@@ -191,50 +198,6 @@ class UserRepository
     }
 
     /**
-     * @param $provider
-     * @param $socialUser
-     *
-     * @return User
-     */
-    public function handleSocialResponse($provider, $socialUser)
-    {
-        $user = User::where('provider', $provider)->where('provider_id', $socialUser->getId())->first();
-
-        if (! $user) {
-            $user = User::where('email', $socialUser->getEmail())->first();
-            if ($user && $socialUser->getEmail()) {
-                // Link account if email exists and matches
-                $user->update([
-                    'provider'    => $provider,
-                    'provider_id' => $socialUser->getId(),
-                ]);
-            } else {
-                // Check if name is provided, otherwise split email or use default
-                $name = $socialUser->getName();
-                $firstName = 'User';
-                $lastName = null;
-                if ($name) {
-                    $parts = explode(' ', trim($name), 2);
-                    $firstName = $parts[0];
-                    $lastName = $parts[1] ?? null;
-                }
-
-                // Create new account
-                $user = $this->create([
-                    'first_name'  => $firstName,
-                    'last_name'   => $lastName,
-                    'email'       => $socialUser->getEmail(),
-                    'provider'    => $provider,
-                    'provider_id' => $socialUser->getId(),
-                    'password'    => Hash::make(Str::random(24)),
-                ]);
-            }
-        }
-
-        return $user;
-    }
-
-    /**
      * @param $request
      *
      * @return JsonResponse
@@ -266,7 +229,7 @@ class UserRepository
     }
     public function verifyOtp($email, $otp)
     {
-        $user = $this->findByEmail($email);
+        $user = User::with('media')->where('email', $email)->first();
 
         if (!$user) {
             throw new ApiOperationFailedException('user_not_found', 404);
@@ -313,7 +276,7 @@ class UserRepository
             'otp_expires_at' => now()->addMinutes(10),
         ]);
 
-        \Illuminate\Support\Facades\Mail::to($user->email)->send(new \App\Mail\VerifyEmailMail($user->email, $otp));
+        Mail::to($user->email)->queue(new VerifyEmailMail($user->email, $otp));
 
         return true;
     }

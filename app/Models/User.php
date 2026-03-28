@@ -67,7 +67,11 @@ class User extends Authenticatable implements HasMedia
     public function getProfilePhotoAttribute()
     {
         /** @var Media $media */
-        $media = $this->getMedia(self::PROFILE)->first();
+        // $media = $this->getMedia(self::PROFILE)->first();
+        $media = $this->media
+            ->where('collection_name', self::PROFILE)
+            ->first();
+
         if (! empty($media)) {
             return $media->getFullUrl();
         }
@@ -114,5 +118,13 @@ class User extends Authenticatable implements HasMedia
     public function followedStores()
     {
         return $this->belongsToMany(Store::class, 'follows', 'user_id', 'store_id')->withTimestamps();
+    }
+
+    /**
+     * Get the settings associated with the user.
+     */
+    public function settings()
+    {
+        return $this->hasOne(UserSetting::class);
     }
 }

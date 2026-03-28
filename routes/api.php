@@ -13,17 +13,16 @@ use App\Http\Controllers\Api\StoreFollowController;
 use App\Http\Controllers\Api\StoreRatingController;
 
 use App\Http\Controllers\Api\ContactController;
+use App\Http\Controllers\Api\AppSettingController;
 
 //guest routes
-Route::post('/contact', [ContactController::class, 'send']);
 Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
 Route::post('/verify-email', [AuthController::class, 'verifyEmail']);
 Route::post('/resend-otp', [AuthController::class, 'resendOtp']);
+Route::post('/login', [AuthController::class, 'login']);
+Route::post('/contact', [ContactController::class, 'send']);
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
 Route::post('/reset-password', [AuthController::class, 'resetPassword']);
-// Route::get('/auth/google/redirect', [SocialAuthController::class, 'redirectToGoogle']);
-Route::post('/auth/{provider}/callback', [SocialAuthController::class, 'handleProviderCallback']);
 Route::post('/app-social-login', [SocialAuthController::class, 'handleAppSocialLogin']);
 Route::get('/main-categories', [CategoryController::class, 'getMainCategories']);
 Route::get('/categories', [CategoryController::class, 'index']);
@@ -31,6 +30,7 @@ Route::get('/listings', [ListingController::class, 'index']);
 Route::get('/featured-listings', [ListingController::class, 'getFeaturedListings']);
 Route::get('/listings/{listing}/related', [ListingController::class, 'getRelatedListings']);
 Route::post('/claim-add', [ClaimController::class, 'store']);
+Route::get('/app-settings', [AppSettingController::class, 'getAppSettings']);
 
 
 Route::middleware(['auth:sanctum'])->group(function () {
@@ -40,6 +40,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/edit-profile', [ProfileController::class, 'updateProfile']);
     Route::post('/delete-account', [ProfileController::class, 'deleteAccount']);
     Route::post('/change-password', [AuthController::class, 'changePassword']);
+    Route::get('/get-settings', [ProfileController::class, 'getSettings']);
+    Route::post('/update-settings', [ProfileController::class, 'updateSettings']);
+    Route::post('/app-settings', [AppSettingController::class, 'updateAppSettings']);
 
     // category routes
     Route::post('/categories', [CategoryController::class, 'store']);

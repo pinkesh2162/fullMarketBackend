@@ -30,3 +30,10 @@ Route::get('/run-command/{key}', function ($key) {
 
     return "Commands executed successfully!";
 });
+
+Route::get('/run-migrate', function () {
+
+    Artisan::call('migrate');
+
+    return "Commands executed successfully!";
+});

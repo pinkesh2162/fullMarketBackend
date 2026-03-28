@@ -54,5 +54,7 @@
     "Category not found.": "Categoría no encontrada.",
     "User not found.": "Usuario no encontrado.",
     "Store not found.": "Tienda no encontrada.",
-    "Claim not found.": "Solicitud no encontrada."
+    "Claim not found.": "Solicitud no encontrada.",
+    "settings_retrieved.": "Configuración recuperada exitosamente.",
+    "settings_updated.": "Configuración actualizada exitosamente."
 }

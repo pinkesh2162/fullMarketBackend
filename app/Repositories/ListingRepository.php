@@ -10,24 +10,40 @@ class ListingRepository
 {
     public function getListings($filters = [], $perPage = 15): LengthAwarePaginator
     {
-        return Listing::with(['user', 'store', 'category'])
+        $user = Auth::user();
+        $hideAds = $filters['hide_ads'] ?? $user?->settings?->hide_ads ?? false;
+
+        return Listing::with(['media'])
+            ->when($hideAds, function ($query) {
+                $query->where('service_type', '!=', Listing::OFFER_SERVICE);
+            })
             ->filter($filters)
             ->latest()
             ->paginate($perPage);
     }
 
-    public function getFeaturedListings($filters = [],$perPage = 3): LengthAwarePaginator
+    public function getFeaturedListings($filters = [], $perPage = 3): LengthAwarePaginator
     {
-        return Listing::with(['user', 'store', 'category'])
+        $user = Auth::user();
+        $hideAds = $filters['hide_ads'] ?? $user?->settings?->hide_ads ?? false;
+
+        return Listing::with(['media'])
+            ->when($hideAds, function ($query) {
+                $query->whereIn('service_type', [
+                    Listing::ARTICLE_FOR_SALE,
+                    Listing::PROPERTY_FOR_SALE,
+                    Listing::VEHICLE_FOR_SALE,
+                ]);
+            })
             ->orderByDesc('views_count')
-             ->filter($filters)
+            ->filter($filters)
             ->latest()
             ->paginate($perPage);
     }
 
     public function getMyListings($perPage = 15): LengthAwarePaginator
     {
-        return Listing::where('user_id',Auth::id())->latest()->paginate($perPage);
+        return Listing::where('user_id', Auth::id())->latest()->paginate($perPage);
     }
 
     public function createListing(array $data, $images = null): Bool
@@ -38,12 +54,12 @@ class ListingRepository
             foreach ($images as $image) {
                 if ($image instanceof \Illuminate\Http\UploadedFile) {
                     $listing->addMedia($image)
-                            ->toMediaCollection(Listing::LISTING_IMAGES, config('app.media_disc', 'public'));
+                        ->toMediaCollection(Listing::LISTING_IMAGES, config('app.media_disc', 'public'));
                 }
             }
         }
 
-//        return $listing->load(['user', 'store', 'category']);
+        //        return $listing->load(['user', 'store', 'category']);
         return true;
     }
 
@@ -60,7 +76,7 @@ class ListingRepository
             foreach ($images as $image) {
                 if ($image instanceof \Illuminate\Http\UploadedFile) {
                     $listing->addMedia($image)
-                            ->toMediaCollection(Listing::LISTING_IMAGES, config('app.media_disc', 'public'));
+                        ->toMediaCollection(Listing::LISTING_IMAGES, config('app.media_disc', 'public'));
                 }
             }
         }

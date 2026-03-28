@@ -16,7 +16,7 @@ class CategoryController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $categories = Category::with('subCategories.subCategories')
+        $categories = Category::with(['subCategories.subCategories', 'media'])
             ->whereNull('parent_id')
             ->where(function ($query) {
                 $query->whereNull('user_id')
