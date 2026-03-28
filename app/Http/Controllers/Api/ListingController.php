@@ -98,7 +98,7 @@ class ListingController extends Controller
 
     public function update(UpdateListingRequest $request, Listing $listing): JsonResponse
     {
-        if ($listing->user_id !== auth()->id()) {
+        if ((int) $listing->user_id !== auth()->id()) {
             return $this->forbidden('listing_update_unauthorized');
         }
 
@@ -108,7 +108,7 @@ class ListingController extends Controller
 
     public function destroy(Listing $listing): JsonResponse
     {
-        if ($listing->user_id !== auth()->id()) {
+        if ((int) $listing->user_id !== auth()->id()) {
             return $this->forbidden('listing_delete_unauthorized');
         }
 

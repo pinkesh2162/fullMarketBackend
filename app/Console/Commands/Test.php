@@ -27,6 +27,9 @@ class Test extends Command
     public function handle()
     {
         $user = User::first();
+        $firstName = 'safih';
+        $lastName = 'dash';
+        dd(getUserImageInitial($user->id, $firstName . ' ' . $lastName));
 
         \Illuminate\Support\Facades\Mail::to($user->email)->send(new \App\Mail\WelcomeMail($user, '123456'));
         \Illuminate\Support\Facades\Mail::to($user->email)->send(new \App\Mail\VerifyEmailMail($user->email, 1234));

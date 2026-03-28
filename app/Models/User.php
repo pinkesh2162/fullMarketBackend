@@ -72,7 +72,9 @@ class User extends Authenticatable implements HasMedia
             return $media->getFullUrl();
         }
 
-        return getUserImageInitial($this->id, $this->name);
+        $fullName = trim(($this->first_name ?? '') . ' ' . ($this->last_name ?? ''));
+
+        return getUserImageInitial($this->id, $fullName);
     }
 
     /**

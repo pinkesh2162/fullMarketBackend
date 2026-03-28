@@ -3,7 +3,7 @@
 if (! function_exists('getUserImageInitial')) {
     function getUserImageInitial($userId, $name)
     {
-        return getAvatarUrl()."?name=$name&size=64&rounded=true&color=fff&background=".getRandomColor($userId);
+        return getAvatarUrl() . "?name=" . urlencode($name) . "&size=64&rounded=true&color=fff&background=" . getRandomColor($userId);
     }
 }
 
