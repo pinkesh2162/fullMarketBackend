@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\ApiOperationFailedException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\EditProfileRequest;
 use App\Http\Resources\UserResource;
@@ -77,6 +78,7 @@ class ProfileController extends Controller
      * Delete the authenticated user account and all associated data.
      *
      * @param  Request  $request
+     * @throws ApiOperationFailedException
      * @return JsonResponse
      */
     public function deleteAccount(Request $request): JsonResponse

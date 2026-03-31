@@ -51,6 +51,10 @@ class ListingRepository
 
     public function createListing(array $data, $images = null): Bool
     {
+        $user = Auth::user();
+        $data['user_id'] = $user->id;
+        $data['store_id'] = @$user->store ? $user->store->id : null;
+
         $listing = Listing::create($data);
 
         if ($images && is_array($images)) {
@@ -63,7 +67,6 @@ class ListingRepository
         }
 
         // Send FCM notification
-        $user = Auth::user();
 
         if ($user && $user->fcm_token) {
             $title = "Listing Created";

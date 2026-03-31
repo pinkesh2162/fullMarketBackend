@@ -3,6 +3,7 @@
 namespace App\Repositories;
 
 use App\Exceptions\ApiOperationFailedException;
+use App\Models\Listing;
 use App\Models\Store;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -34,31 +35,26 @@ class StoreRepository
             if(!empty($store)){
                 $store = Store::updateOrCreate(
                 ['user_id' => $userId],
-                [
-                    'name' => $data['name'] ?? null,
-                    'location' => $data['location'] ?? null,
-                    'business_time' => $data['business_time'] ?? null,
-                    'contact_information' => $data['contact_information'] ?? null,
-                    'social_media' => $data['social_media'] ?? null,
-                ]
+                $data
             );
             }else{
-                $store = Store::create([
-                    'user_id' => $userId,
-                    'name' => $data['name'] ?? null,
-                    'location' => $data['location'] ?? null,
-                    'business_time' => $data['business_time'] ?? null,
-                    'contact_information' => $data['contact_information'] ?? null,
-                    'social_media' => $data['social_media'] ?? null,
-                ]);
+                $data['user_id'] = $userId;
+
+                $store = Store::create($data);
+
                  $user = Auth::user();
+                // Assign existing listings to the newly created/updated store
+                Listing::where('user_id', $userId)
+                    ->whereNull('store_id')
+                    ->update(['store_id' => $store->id]);
+
                 if ($user && $user->fcm_token) {
                     $title = "Store Created";
                     $body = "Your store '{$store->name}' has been created successfully.";
                     dispatch(new \App\Jobs\SendFcmNotificationJob($user->fcm_token, $title, $body));
                 }
             }
-            
+
 
             // Handle cover_photo upload
             if (isset($data['cover_photo']) && $data['cover_photo'] instanceof \Illuminate\Http\UploadedFile) {
@@ -73,10 +69,6 @@ class StoreRepository
                     config('app.media_disc', 'public'));
             }
 
-            // Assign existing listings to the newly created/updated store
-            \App\Models\Listing::where('user_id', $userId)
-                ->whereNull('store_id')
-                ->update(['store_id' => $store->id]);
 
             DB::commit();
 
@@ -98,20 +90,20 @@ class StoreRepository
     {
         try {
             $store = Store::where('user_id', $userId)->first();
-            
+
             if (!$store) {
                 throw new ApiOperationFailedException('store_not_found', 404);
             }
 
             // Preserve listings by setting store_id to null before deleting the store
-            \App\Models\Listing::where('user_id', $userId)
+            Listing::where('user_id', $userId)
                 ->update(['store_id' => null]);
 
-            // Spatie Media Library handles deleting attached media automatically 
+            // Spatie Media Library handles deleting attached media automatically
             // if configured (or we can just let CASCADE delete take care of it or manual clean up)
             $store->clearMediaCollection('cover_photo');
             $store->clearMediaCollection('logo');
-            
+
             return $store->delete();
         } catch (\Exception $e) {
             if ($e instanceof ApiOperationFailedException) {

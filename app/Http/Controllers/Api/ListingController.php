@@ -16,7 +16,7 @@ use Illuminate\Http\Request;
 class ListingController extends Controller
 {
     /**
-     * @var ListingRepository 
+     * @var ListingRepository
      */
     protected ListingRepository $listingRepo;
 
@@ -97,8 +97,6 @@ class ListingController extends Controller
     public function store(StoreListingRequest $request): JsonResponse
     {
         $data = $request->validated();
-        $data['user_id'] = auth()->id();
-
         $this->listingRepo->createListing($data, $request->file('images'));
 
         return $this->actionSuccess('listing_created');

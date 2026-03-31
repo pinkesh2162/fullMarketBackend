@@ -6,6 +6,8 @@ use App\Exceptions\ApiOperationFailedException;
 use App\Http\Resources\UserResource;
 use App\Mail\VerifyEmailMail;
 use App\Mail\WelcomeMail;
+use App\Models\Favorite;
+use App\Models\Listing;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -61,17 +63,17 @@ class UserRepository
                     unset($data['name']);
                 }
 
-//                temp close for developement
-//                $otp = random_int(100000, 999999);
-//                $data['otp'] = $otp;
-//                $data['otp_expires_at'] = now()->addMinutes(10);
+                //                temp close for developement
+                //                $otp = random_int(100000, 999999);
+                //                $data['otp'] = $otp;
+                //                $data['otp_expires_at'] = now()->addMinutes(10);
                 $data['email_verified_at'] = now();
                 $user = $this->create($data);
 
                 // Dispatch emails to queue (NON-BLOCKING ⚡)
-//                temp close for developement
-//                Mail::to($user->email)->queue(new WelcomeMail($user, $request->password));
-//                Mail::to($user->email)->queue(new VerifyEmailMail($user->email, $otp));
+                //                temp close for developement
+                //                Mail::to($user->email)->queue(new WelcomeMail($user, $request->password));
+                //                Mail::to($user->email)->queue(new VerifyEmailMail($user->email, $otp));
 
                 return [
                     'user' => $user,
@@ -304,13 +306,16 @@ class UserRepository
     /**
      * @param  User  $user
      *
-     *
+     * @throws ApiOperationFailedException
      * @return bool
      */
     public function deleteUserAccount(User $user): bool
     {
-        return DB::transaction(function () use ($user) {
+        DB::beginTransaction();
+        try {
             if ($user->store) {
+                // Prevent database ON DELETE CASCADE from hard-deleting the soft-deletable listings
+                Listing::where('user_id', $user->id)->update(['store_id' => null]);
                 $user->store->delete();
             }
 
@@ -322,10 +327,16 @@ class UserRepository
                 $claim->delete();
             }
 
-            \App\Models\Favorite::where('user_id', $user->id)->delete();
+            Favorite::where('user_id', $user->id)->delete();
             $user->tokens()->delete();
 
-            return $user->delete();
-        });
+            $user->delete();
+            DB::commit();
+
+            return true;
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw new ApiOperationFailedException($e->getMessage(), 422);
+        }
     }
 }
