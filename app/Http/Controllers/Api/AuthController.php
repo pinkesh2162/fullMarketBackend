@@ -58,12 +58,16 @@ class AuthController extends Controller
             return $this->actionFailure('otp_not_verified', null, 403);
         }
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+        try {
+            $token = $user->createToken('auth_token')->plainTextToken;
 
-        return $this->actionSuccess('login_success', [
-            'user' => UserResource::make($user),
-            'token' => $token,
-        ]);
+            return $this->actionSuccess('login_success', [
+                'user' => UserResource::make($user),
+                'token' => $token,
+            ]);
+        } catch (\Exception $e) {
+            return $this->actionFailure($e->getMessage(), null, self::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 
     /**

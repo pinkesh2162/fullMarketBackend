@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
@@ -14,7 +15,7 @@ use Spatie\MediaLibrary\InteractsWithMedia;
 class User extends Authenticatable implements HasMedia
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable, InteractsWithMedia;
+    use HasApiTokens, HasFactory, Notifiable, InteractsWithMedia, SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
@@ -33,9 +34,9 @@ class User extends Authenticatable implements HasMedia
         'lang',
         'provider',
         'provider_id',
-        'otp',
         'otp_expires_at',
-        'email_verified_at'
+        'email_verified_at',
+        'fcm_token'
     ];
 
     const PROFILE = 'user';
@@ -94,7 +95,11 @@ class User extends Authenticatable implements HasMedia
      */
     public function favoriteListings()
     {
-        return $this->belongsToMany(Listing::class, 'favorites', 'user_id', 'listing_id')->withTimestamps();
+        return $this->belongsToMany(Listing::class, 'favorites', 'user_id', 'listing_id')
+                    ->using(Favorite::class)
+                    ->withPivot('deleted_at')
+                    ->wherePivotNull('deleted_at')
+                    ->withTimestamps();
     }
 
     /**

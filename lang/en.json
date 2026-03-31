@@ -56,5 +56,6 @@
     "Store not found.": "Store not found.",
     "Claim not found.": "Claim not found.",
     "settings_retrieved.": "Settings retrieved successfully.",
-    "settings_updated.": "Settings updated successfully."
+    "settings_updated.": "Settings updated successfully.",
+    "update_fcm_token": "FCM token updated successfully."
 }

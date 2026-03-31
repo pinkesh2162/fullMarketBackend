@@ -12,7 +12,7 @@ use \Illuminate\Http\Request;
 class ProfileController extends Controller
 {
     /**
-     * @var UserRepository 
+     * @var UserRepository
      */
     protected $userRepo;
 
@@ -53,7 +53,24 @@ class ProfileController extends Controller
 
         $user = $this->userRepo->updateProfile($request->user(), $validatedData);
 
-        return $this->actionSuccess('profile_updated', ['user' => $user]);
+        return $this->actionSuccess('profile_updated', ['user' => $user->fresh()]);
+    }
+
+    /**
+     * @param  Request  $request
+     *
+     * @return JsonResponse
+     */
+    public function updateFcmToken(Request $request)
+    {
+
+        $user = $request->user();
+
+        if ($request->has('fcm_token')) {
+            $user->update(['fcm_token' => $request->fcm_token]);
+        }
+
+        return $this->actionSuccess('update_fcm_token');
     }
 
     /**
@@ -77,9 +94,13 @@ class ProfileController extends Controller
      */
     public function getSettings(Request $request): JsonResponse
     {
-        $settings = $request->user()->settings()->firstOrCreate([]);
+        try {
+            $settings = $request->user()->settings()->firstOrCreate([]);
 
-        return $this->actionSuccess('settings_retrieved', $settings);
+            return $this->actionSuccess('settings_retrieved', $settings);
+        } catch (\Exception $e) {
+            return $this->actionFailure('settings_retrieved', $e->getMessage());
+        }
     }
 
     /**

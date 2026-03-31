@@ -2,9 +2,12 @@
 
 namespace App\Repositories;
 
+use App\Jobs\SendFcmNotificationJob;
 use App\Models\Listing;
+use App\Services\FcmService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class ListingRepository
 {
@@ -59,7 +62,15 @@ class ListingRepository
             }
         }
 
-        //        return $listing->load(['user', 'store', 'category']);
+        // Send FCM notification
+        $user = Auth::user();
+
+        if ($user && $user->fcm_token) {
+            $title = "Listing Created";
+            $body = "Your listing '{$listing->title}' has been created successfully.";
+            dispatch(new SendFcmNotificationJob($user->fcm_token, $title, $body));
+        }
+
         return true;
     }
 

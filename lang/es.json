@@ -56,5 +56,6 @@
     "Store not found.": "Tienda no encontrada.",
     "Claim not found.": "Solicitud no encontrada.",
     "settings_retrieved.": "Configuración recuperada exitosamente.",
-    "settings_updated.": "Configuración actualizada exitosamente."
+    "settings_updated.": "Configuración actualizada exitosamente.",
+    "update_fcm_token": "FCM token actualizado exitosamente."
 }

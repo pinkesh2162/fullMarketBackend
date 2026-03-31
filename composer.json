@@ -6,12 +6,11 @@
     "license": "MIT",
     "require": {
         "php": "^8.1",
+        "google/auth": "^1.50",
         "guzzlehttp/guzzle": "^7.2",
         "laravel/framework": "^10.10",
         "laravel/sanctum": "^3.3",
-        "laravel/socialite": "^5.26",
         "laravel/tinker": "^2.8",
-        "socialiteproviders/apple": "^5.9",
         "spatie/laravel-medialibrary": "^10.15"
     },
     "require-dev": {

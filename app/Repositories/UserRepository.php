@@ -44,6 +44,7 @@ class UserRepository
     /**
      * @param $request
      *
+     * @throws ApiOperationFailedException
      * @return array|JsonResponse
      */
     public function registerUser($request)
@@ -60,15 +61,17 @@ class UserRepository
                     unset($data['name']);
                 }
 
-                $otp = random_int(100000, 999999);
-                $data['otp'] = $otp;
-                $data['otp_expires_at'] = now()->addMinutes(10);
-
+//                temp close for developement
+//                $otp = random_int(100000, 999999);
+//                $data['otp'] = $otp;
+//                $data['otp_expires_at'] = now()->addMinutes(10);
+                $data['email_verified_at'] = now();
                 $user = $this->create($data);
 
                 // Dispatch emails to queue (NON-BLOCKING ⚡)
-                Mail::to($user->email)->queue(new WelcomeMail($user, $request->password));
-                Mail::to($user->email)->queue(new VerifyEmailMail($user->email, $otp));
+//                temp close for developement
+//                Mail::to($user->email)->queue(new WelcomeMail($user, $request->password));
+//                Mail::to($user->email)->queue(new VerifyEmailMail($user->email, $otp));
 
                 return [
                     'user' => $user,
@@ -83,7 +86,7 @@ class UserRepository
     /**
      * Find user by email.
      *
-     * @param string $email
+     * @param  string  $email
      * @return User|null
      */
     public function findByEmail(string $email)
@@ -200,6 +203,7 @@ class UserRepository
     /**
      * @param $request
      *
+     * @throws ApiOperationFailedException
      * @return JsonResponse
      */
     public function handleResetPassword($request): void
@@ -227,6 +231,15 @@ class UserRepository
 
         DB::table('password_reset_tokens')->where('email', $request->email)->delete();
     }
+
+    /**
+     * @param $email
+     * @param $otp
+     *
+     * @throws ApiOperationFailedException
+     *
+     * @return array
+     */
     public function verifyOtp($email, $otp)
     {
         $user = User::with('media')->where('email', $email)->first();
@@ -258,6 +271,13 @@ class UserRepository
         return ['user' => UserResource::make($user), 'token' => $token];
     }
 
+    /**
+     * @param $email
+     *
+     * @throws ApiOperationFailedException
+     *
+     * @return bool
+     */
     public function resendOtp($email)
     {
         $user = $this->findByEmail($email);
@@ -281,34 +301,30 @@ class UserRepository
         return true;
     }
 
+    /**
+     * @param  User  $user
+     *
+     *
+     * @return bool
+     */
     public function deleteUserAccount(User $user): bool
     {
         return DB::transaction(function () use ($user) {
-            // Delete store (one-to-one) if exists
             if ($user->store) {
-                // Media will be cleared by Spatie on delete
                 $user->store->delete();
             }
 
-            // Delete listings (one-to-many)
-            // Need to iterate to ensure Spatie media is cleared for each listing
             foreach ($user->listings as $listing) {
                 $listing->delete();
             }
 
-            // Delete claims (one-to-many)
             foreach ($user->claims as $claim) {
                 $claim->delete();
             }
 
-            // Pivot table entries (favorites) are handled by Eloquent relationships 
-            // but we can manually detach if needed. belongsToMany doesn't auto-delete pivot rows unless specified.
-            $user->favoriteListings()->detach();
-
-            // Delete all Sanctum tokens
+            \App\Models\Favorite::where('user_id', $user->id)->delete();
             $user->tokens()->delete();
 
-            // Finally delete the user (media will be cleared by Spatie)
             return $user->delete();
         });
     }
