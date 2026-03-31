@@ -32,11 +32,7 @@ class ListingRepository
 
         return Listing::with(['media'])
             ->when($hideAds, function ($query) {
-                $query->whereIn('service_type', [
-                    Listing::ARTICLE_FOR_SALE,
-                    Listing::PROPERTY_FOR_SALE,
-                    Listing::VEHICLE_FOR_SALE,
-                ]);
+                $query->where('service_type', '!=', Listing::OFFER_SERVICE);
             })
             ->orderByDesc('views_count')
             ->filter($filters)

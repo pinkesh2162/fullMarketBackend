@@ -120,7 +120,9 @@ class ProfileController extends Controller
                 'notification_post',
                 'message_notification',
                 'business_create',
-                'follow_request'
+                'follow_request',
+                'notification_time_start',
+                'notification_time_end'
             ])
         );
 

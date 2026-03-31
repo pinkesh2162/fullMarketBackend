@@ -16,6 +16,8 @@ class UserSetting extends Model
         'message_notification',
         'business_create',
         'follow_request',
+        'notification_time_start',
+        'notification_time_end',
     ];
 
     protected $casts = [

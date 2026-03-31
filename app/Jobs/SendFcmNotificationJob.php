@@ -40,14 +40,28 @@ class SendFcmNotificationJob implements ShouldQueue
             return;
         }
 
-        // Only send between 10 AM and 5 PM
-        $now = now();
-        $startTime = $now->copy()->setTime(10, 0, 0);
-        $endTime = $now->copy()->setTime(17, 0, 0);
+        $user = \App\Models\User::where('fcm_token', $this->token)->with('settings')->first();
+        $settings = $user ? $user->settings : null;
 
-        if (!$now->between($startTime, $endTime)) {
-            Log::info("FCM notification skipped. Current time {$now->format('H:i')} is outside 10 AM - 5 PM window.");
-            return;
+        if ($settings && $settings->notification_time_start && $settings->notification_time_end) {
+            $now = now();
+            // Parse time strings
+            $start = \Carbon\Carbon::createFromFormat('H:i:s', $settings->notification_time_start)->setDateFrom($now);
+            $end = \Carbon\Carbon::createFromFormat('H:i:s', $settings->notification_time_end)->setDateFrom($now);
+
+            // Handle overnight windows (e.g. 22:00 to 06:00)
+            if ($start->greaterThan($end)) {
+                // If now is before end time, it means we're in the early morning part of the window (add a day to end for comparison is tricky, better to check if it's NOT between end and start)
+                if ($now->between($end, $start)) {
+                    Log::info("FCM notification skipped for user [{$user->id}]. Outside custom window {$settings->notification_time_start} - {$settings->notification_time_end}.");
+                    return;
+                }
+            } else {
+                if (!$now->between($start, $end)) {
+                    Log::info("FCM notification skipped for user [{$user->id}]. Outside custom window {$settings->notification_time_start} - {$settings->notification_time_end}.");
+                    return;
+                }
+            }
         }
 
         try {
