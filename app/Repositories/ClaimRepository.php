@@ -45,7 +45,7 @@ class ClaimRepository
 
         // Notify owner
         $adminEmail = config('app.admin_email');
-        Mail::to($adminEmail)->send(new ClaimMail($claim));
+        Mail::queue($adminEmail)->send(new ClaimMail($claim));
 
         return $claim;
     }

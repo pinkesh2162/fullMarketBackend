@@ -15,11 +15,12 @@ use Illuminate\Support\Facades\Mail;
 use App\Mail\ForgotPasswordMail;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
     /**
-     * @var UserRepository 
+     * @var UserRepository
      */
     protected $userRepo;
 
@@ -31,7 +32,6 @@ class AuthController extends Controller
     {
         $this->userRepo = $userRepository;
     }
-
 
     /**
      * @param  Request  $request
@@ -86,7 +86,8 @@ class AuthController extends Controller
     }
 
     /**
-     * @param Request $request
+     * @param  Request  $request
+     * @throws ApiOperationFailedException
      * @return JsonResponse
      */
     public function verifyEmail(Request $request)
@@ -102,7 +103,8 @@ class AuthController extends Controller
     }
 
     /**
-     * @param Request $request
+     * @param  Request  $request
+     * @throws ApiOperationFailedException
      * @return JsonResponse
      */
     public function resendOtp(Request $request)
@@ -138,7 +140,7 @@ class AuthController extends Controller
             return $this->notFound('email_not_found');
         }
 
-        $token = \Illuminate\Support\Str::random(60);
+        $token = Str::random(60);
 
         DB::table('password_reset_tokens')->updateOrInsert(
             ['email' => $user->email],
@@ -147,7 +149,7 @@ class AuthController extends Controller
 
         $resetLink = env('FRONTEND_URL', 'http://localhost:3000') . '/reset-password?token=' . $token . '&email=' . $user->email;
 
-        Mail::to($user->email)->send(new ForgotPasswordMail($user->email, $resetLink));
+        Mail::to($user->email)->queue(new ForgotPasswordMail($user->email, $resetLink));
 
         return $this->actionSuccess('password_reset_link_sent');
     }

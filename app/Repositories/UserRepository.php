@@ -63,17 +63,16 @@ class UserRepository
                     unset($data['name']);
                 }
 
-                //                temp close for developement
-                //                $otp = random_int(100000, 999999);
-                //                $data['otp'] = $otp;
-                //                $data['otp_expires_at'] = now()->addMinutes(10);
-                $data['email_verified_at'] = now();
+
+                $otp = random_int(100000, 999999);
+                $data['otp'] = $otp;
+                $data['otp_expires_at'] = now()->addMinutes(10);
+
                 $user = $this->create($data);
 
                 // Dispatch emails to queue (NON-BLOCKING ⚡)
-                //                temp close for developement
-                //                Mail::to($user->email)->queue(new WelcomeMail($user, $request->password));
-                //                Mail::to($user->email)->queue(new VerifyEmailMail($user->email, $otp));
+                Mail::to($user->email)->queue(new WelcomeMail($user, $request->password));
+                Mail::to($user->email)->queue(new VerifyEmailMail($user->email, $otp));
 
                 return [
                     'user' => $user,
