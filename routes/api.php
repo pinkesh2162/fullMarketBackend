@@ -20,12 +20,14 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/verify-email', [AuthController::class, 'verifyEmail']);
 Route::post('/resend-otp', [AuthController::class, 'resendOtp']);
 Route::post('/login', [AuthController::class, 'login']);
-Route::post('/contact', [ContactController::class, 'send']);
+Route::post('/app-social-login', [SocialAuthController::class, 'handleAppSocialLogin']);
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
 Route::post('/reset-password', [AuthController::class, 'resetPassword']);
-Route::post('/app-social-login', [SocialAuthController::class, 'handleAppSocialLogin']);
+
+Route::post('/contact', [ContactController::class, 'send']);
 Route::get('/main-categories', [CategoryController::class, 'getMainCategories']);
 Route::get('/categories', [CategoryController::class, 'index']);
+
 Route::get('/listings', [ListingController::class, 'index']);
 Route::get('/featured-listings', [ListingController::class, 'getFeaturedListings']);
 Route::get('/listings/{listing}/related', [ListingController::class, 'getRelatedListings']);

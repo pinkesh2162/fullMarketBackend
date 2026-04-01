@@ -21,6 +21,7 @@ return new class extends Migration
             $table->string('phone');
             $table->string('phone_code');
             $table->text('description')->nullable();
+            $table->softDeletes();
             $table->timestamps();
         });
     }

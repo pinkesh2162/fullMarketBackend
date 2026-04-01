@@ -24,7 +24,13 @@ return new class extends Migration
             $table->string('lang')->default('en');
             $table->timestamp('email_verified_at')->nullable();
             $table->rememberToken();
+            $table->string('provider')->nullable();
+            $table->string('provider_id')->nullable();
+            $table->string('fcm_token')->nullable();
+            $table->string('otp')->nullable();
+            $table->timestamp('otp_expires_at')->nullable();
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {

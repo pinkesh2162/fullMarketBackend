@@ -19,6 +19,8 @@ return new class extends Migration
             $table->boolean('message_notification')->default(true);
             $table->boolean('business_create')->default(true);
             $table->boolean('follow_request')->default(true);
+            $table->time('notification_time_start')->nullable();
+            $table->time('notification_time_end')->nullable();
             $table->timestamps();
         });
     }
