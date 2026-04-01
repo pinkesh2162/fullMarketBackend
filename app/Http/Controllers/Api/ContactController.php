@@ -7,6 +7,7 @@ use App\Mail\ContactMail;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
+use App\Models\Contact;
 
 class ContactController extends Controller
 {
@@ -26,6 +27,9 @@ class ContactController extends Controller
         ]);
 
         try {
+            // Store contact message in the database
+            Contact::create($data);
+
             // Send email to the support address
             Mail::to(config('app.admin_email'))->queue(new ContactMail($data));
 
