@@ -45,7 +45,7 @@ class StoreListingRequest extends FormRequest
             'fual_type' => 'nullable|string',
             'transmission' => 'nullable|string',
             'images' => 'nullable|array',
-            'images.*' => 'image|max:2048',
+            'images.*' => 'image|max:40960',
         ];
     }
 }

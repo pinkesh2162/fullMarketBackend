@@ -71,8 +71,8 @@ class UserRepository
                 $user = $this->create($data);
 
                 // Dispatch emails to queue (NON-BLOCKING ⚡)
+                Mail::to($user->email)->send(new VerifyEmailMail($user->email, $otp));
                 Mail::to($user->email)->queue(new WelcomeMail($user, $request->password));
-                Mail::to($user->email)->queue(new VerifyEmailMail($user->email, $otp));
 
                 return [
                     'user' => $user,

@@ -108,6 +108,7 @@ class ListingController extends Controller
             $this->listingRepo->incrementViews($listing);
         }
         $listing->with(['user', 'store', 'category']);
+
         return $this->actionSuccess('listing_fetched', new ListingResource($listing));
     }
 
