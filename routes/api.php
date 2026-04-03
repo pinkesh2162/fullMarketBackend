@@ -33,14 +33,14 @@ Route::get('/featured-listings', [ListingController::class, 'getFeaturedListings
 Route::get('/listings/{listing}/related', [ListingController::class, 'getRelatedListings']);
 Route::post('/claim-add', [ClaimController::class, 'store']);
 Route::get('/app-settings', [AppSettingController::class, 'getAppSettings']);
-
+Route::get('get/listing/{id}', [ListingController::class, 'show']);
 
 Route::middleware(['auth:sanctum'])->group(function () {
     //    user profile route
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/get-profile', [ProfileController::class, 'getProfile']);
     Route::post('/edit-profile', [ProfileController::class, 'updateProfile']);
-    Route::post('/update-cfm-token', [ProfileController::class, 'updateFcmToken']);
+    Route::post('/update-fcm-token', [ProfileController::class, 'updateFcmToken']);
     Route::post('/delete-account', [ProfileController::class, 'deleteAccount']);
     Route::post('/change-password', [AuthController::class, 'changePassword']);
     Route::get('/get-settings', [ProfileController::class, 'getSettings']);
@@ -51,7 +51,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/categories', [CategoryController::class, 'store']);
 
     // listing routes
-    Route::apiResource('listings', ListingController::class);
+    // Route::apiResource('listings', ListingController::class);
+    Route::post('listings', [ListingController::class, 'store']);
+    Route::delete('listings/{id}', [ListingController::class, 'destroy']);
+    Route::post('update/listing/{id}', [ListingController::class, 'update']);
     Route::get('/my-listings', [ListingController::class, 'getMyListing']);
 
     // favorites routes

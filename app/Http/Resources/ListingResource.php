@@ -11,9 +11,9 @@ class ListingResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'user' => new UserResource($this->whenLoaded('user')),
-            'store' => new StoreResource($this->whenLoaded('store')),
-            'category' => new CategoryResource($this->whenLoaded('category')),
+            'user' => new UserResource($this->user),
+            'store' => new StoreResource($this->store),
+            'category' => new CategoryResource($this->category),
             'service_type' => $this->service_type,
             'title' => $this->title,
             'service_modality' => $this->service_modality,

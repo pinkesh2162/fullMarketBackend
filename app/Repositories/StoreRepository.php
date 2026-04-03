@@ -18,11 +18,11 @@ class StoreRepository
      * @throws ApiOperationFailedException
      * @return Store
      */
-    public function updateStore(int $userId, array $data): Store
+    public function updateStore(int $userId, $request): Store
     {
         try {
             DB::beginTransaction();
-
+            $data = $request->all();
             $store = Store::where('user_id', $userId)->first();
 
             $data = [
@@ -57,15 +57,15 @@ class StoreRepository
 
 
             // Handle cover_photo upload
-            if (isset($data['cover_photo']) && $data['cover_photo'] instanceof \Illuminate\Http\UploadedFile) {
+            if (isset($request->cover_photo) && $request->cover_photo instanceof \Illuminate\Http\UploadedFile) {
                 $store->clearMediaCollection(Store::COVER_PHOTO);
-                $store->addMedia($data['cover_photo'])->toMediaCollection(Store::COVER_PHOTO,
+                $store->addMedia($request->cover_photo)->toMediaCollection(Store::COVER_PHOTO,
                     config('app.media_disc', 'public'));
             }
 
-             if (isset($data['logo']) && $data['logo'] instanceof \Illuminate\Http\UploadedFile) {
+             if (isset($request->logo) && $request->logo instanceof \Illuminate\Http\UploadedFile) {
                 $store->clearMediaCollection(Store::PROFILE_PHOTO);
-                $store->addMedia($data['logo'])->toMediaCollection(Store::PROFILE_PHOTO,
+                $store->addMedia($request->logo)->toMediaCollection(Store::PROFILE_PHOTO,
                     config('app.media_disc', 'public'));
             }
 

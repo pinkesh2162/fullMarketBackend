@@ -23,7 +23,7 @@ class StoreController extends Controller
      */
     public function show(): JsonResponse
     {
-        $store = Store::where('user_id', auth()->id())->first();
+        $store = Store::with('media')->where('user_id', auth()->id())->first();
 
         if (!$store) {
             return $this->notFound('store_not_found');
@@ -37,7 +37,7 @@ class StoreController extends Controller
      */
     public function update(StoreRequest $request): JsonResponse
     {
-        $store = $this->storeRepository->updateStore(auth()->id(), $request->validated());
+        $store = $this->storeRepository->updateStore(auth()->id(), $request);
 
         return $this->actionSuccess('store_updated', new StoreResource($store));
     }

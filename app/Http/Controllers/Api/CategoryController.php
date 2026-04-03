@@ -8,6 +8,7 @@ use App\Http\Requests\StoreCategoryRequest;
 use App\Http\Resources\CategoryResource;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Cache;
 
 class CategoryController extends Controller
 {
@@ -31,15 +32,28 @@ class CategoryController extends Controller
      */
     public function getMainCategories(): JsonResponse
     {
-        $categories = Category::toBase()
-            ->whereNull('parent_id')
-            ->where(function ($query) {
-                $query->whereNull('user_id')
-                    ->orWhere('user_id', auth('sanctum')->id());
-            })
-            ->select('id', 'name')->get();
+        $userId = auth('sanctum')->id() ?? 'guest';
+        $cacheKey = "main_categories_{$userId}";
 
-        return $this->actionSuccess('categories_fetched', $categories);
+          $categories =  Category::with('media')
+                ->whereNull('parent_id')
+                ->where(function ($query) {
+                    $query->whereNull('user_id')
+                        ->orWhere('user_id', auth('sanctum')->id());
+                })
+                ->get();
+
+        // $categories = Cache::remember($cacheKey, now()->addDay(), function () {
+        //     return Category::with('media')
+        //         ->whereNull('parent_id')
+        //         ->where(function ($query) {
+        //             $query->whereNull('user_id')
+        //                 ->orWhere('user_id', auth('sanctum')->id());
+        //         })
+        //         ->get();
+        // });
+
+        return $this->actionSuccess('categories_fetched', CategoryResource::collection($categories));
     }
 
     /**
@@ -61,6 +75,11 @@ class CategoryController extends Controller
         }
 
         $category->load('subCategories');
+
+        Cache::forget('main_categories_guest');
+        if (auth()->check()) {
+            Cache::forget('main_categories_' . auth()->id());
+        }
 
         return $this->actionSuccess('category_created', new CategoryResource($category), self::HTTP_CREATED);
     }

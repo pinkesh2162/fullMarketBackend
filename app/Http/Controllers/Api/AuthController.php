@@ -44,12 +44,14 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        $user = Cache::remember("user_{$request->email}", 60, function () use ($request) {
-            return User::with('media')
+        // $user = Cache::remember("user_{$request->email}", 60, function () use ($request) {
+        //     return User::with('media')
+        //         ->where('email', $request->email)
+        //         ->first();
+        // });
+        $user = User::with('media')
                 ->where('email', $request->email)
                 ->first();
-        });
-
         if (!$user || !Hash::check($request->password, $user->password)) {
             return $this->actionFailure('invalid_credentials', null, self::HTTP_UNPROCESSABLE_ENTITY);
         }
@@ -149,7 +151,7 @@ class AuthController extends Controller
 
         $resetLink = env('FRONTEND_URL', 'http://localhost:3000') . '/reset-password?token=' . $token . '&email=' . $user->email;
 
-        Mail::to($user->email)->queue(new ForgotPasswordMail($user->email, $resetLink));
+        Mail::to($user->email)->send(new ForgotPasswordMail($user->email, $resetLink));
 
         return $this->actionSuccess('password_reset_link_sent');
     }

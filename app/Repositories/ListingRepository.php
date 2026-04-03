@@ -40,9 +40,12 @@ class ListingRepository
             ->paginate($perPage);
     }
 
-    public function getMyListings($perPage = 15): LengthAwarePaginator
+    public function getMyListings($filters = [], $perPage = 15): LengthAwarePaginator
     {
-        return Listing::where('user_id', Auth::id())->latest()->paginate($perPage);
+        return Listing::where('user_id', Auth::id())
+            ->filter($filters)
+            ->latest()
+            ->paginate($perPage);
     }
 
     public function createListing(array $data, $images = null): Bool

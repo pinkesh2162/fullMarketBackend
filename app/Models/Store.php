@@ -31,7 +31,7 @@ class Store extends Model implements HasMedia
 
     const COVER_PHOTO = 'cover_photo';
     const PROFILE_PHOTO = 'profile_photo';
-    
+
     /**
      * Get the user that owns the store.
      */
@@ -61,7 +61,7 @@ class Store extends Model implements HasMedia
 
         return getUserImageInitial($this->id, $this->name);
     }
-    
+
     /**
      * Get the users that follow the store.
      */

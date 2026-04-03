@@ -36,7 +36,7 @@ class ListingController extends Controller
     public function index(Request $request): JsonResponse
     {
         $perPage = @$request->perPage ?? 15;
-        $filters = $request->only(['category', 'location', 'lat', 'long', 'lng', 'radius', 'hide_ads']);
+        $filters = $request->only(['category', 'location', 'lat', 'long', 'lng', 'radius', 'hide_ads', 'title', 'search_keyword']);
         if (!isset($filters['long']) && isset($filters['lng'])) {
             $filters['long'] = $filters['lng'];
         }
@@ -59,7 +59,12 @@ class ListingController extends Controller
     {
         $perPage = @$request->perPage ?? 15;
 
-        $listings = $this->listingRepo->getMyListings($perPage);
+        $filters = $request->only(['category', 'location', 'lat', 'long', 'lng', 'radius', 'hide_ads', 'title', 'search_keyword']);
+        if (!isset($filters['long']) && isset($filters['lng'])) {
+            $filters['long'] = $filters['lng'];
+        }
+
+        $listings = $this->listingRepo->getMyListings($filters, $perPage);
 
         return $this->actionSuccess(
             'listings_fetched',
@@ -76,7 +81,10 @@ class ListingController extends Controller
     public function getFeaturedListings(Request $request): JsonResponse
     {
         $perPage = @$request->perPage ?? 3;
-        $filters = $request->only(['category', 'location', 'lat', 'long', 'radius', 'hide_ads']);
+        $filters = $request->only(['category', 'location', 'lat', 'long', 'lng', 'radius', 'hide_ads', 'title', 'search_keyword']);
+        if (!isset($filters['long']) && isset($filters['lng'])) {
+            $filters['long'] = $filters['lng'];
+        }
 
         $listings = $this->listingRepo->getFeaturedListings($filters, $perPage);
 
@@ -102,8 +110,10 @@ class ListingController extends Controller
         return $this->actionSuccess('listing_created');
     }
 
-    public function show(Listing $listing): JsonResponse
+    public function show($id): JsonResponse
     {
+        $listing = Listing::findOrFail($id);
+
         if ($listing->user_id !== auth()->id()) {
             $this->listingRepo->incrementViews($listing);
         }
@@ -112,18 +122,21 @@ class ListingController extends Controller
         return $this->actionSuccess('listing_fetched', new ListingResource($listing));
     }
 
-    public function update(UpdateListingRequest $request, Listing $listing): JsonResponse
+    public function update(UpdateListingRequest $request, $id): JsonResponse
     {
+        $listing = Listing::findOrFail($id);
         if ((int) $listing->user_id !== auth()->id()) {
             return $this->forbidden('listing_update_unauthorized');
         }
 
-        $listing = $this->listingRepo->updateListing($listing, $request->validated(), $request->file('images'));
+        $listing = $this->listingRepo->updateListing($listing, $request->all(), $request->file('images'));
         return $this->actionSuccess('listing_updated', new ListingResource($listing));
     }
 
-    public function destroy(Listing $listing): JsonResponse
+    public function destroy($id): JsonResponse
     {
+        $listing = Listing::findOrFail($id);
+
         if ((int) $listing->user_id !== auth()->id()) {
             return $this->forbidden('listing_delete_unauthorized');
         }
@@ -141,6 +154,7 @@ class ListingController extends Controller
     {
         $perPage = @$request->perPage ?? 6;
         $listings = $this->listingRepo->getRelatedListings($listing, $perPage);
+
         return $this->actionSuccess('related_listings_fetched', ListingResource::collection($listings));
     }
 }

@@ -93,6 +93,14 @@ class Listing extends Model implements HasMedia
 
     public function scopeFilter($query, array $filters)
     {
+        $query->when($filters['title'] ?? false, function ($q, $title) {
+            $q->where('title', 'like', "%{$title}%");
+        });
+
+        $query->when($filters['search_keyword'] ?? false, function ($q, $search_keyword) {
+            $q->where('search_keyword', 'like', "%{$search_keyword}%");
+        });
+
         $query->when($filters['category'] ?? false, function ($q, $category) {
             $q->whereHas('category', function ($query) use ($category) {
                 $query->where('name', 'like', "%{$category}%");
@@ -109,9 +117,9 @@ class Listing extends Model implements HasMedia
             $radius = max(0, min($filters['radius'] ?? 0, 500));
 
             $query->whereRaw("
-                (6371 * acos(cos(radians(?)) * cos(radians(additional_info->>'$.location.lat')) 
-                * cos(radians(additional_info->>'$.location.long') - radians(?)) 
-                + sin(radians(?)) * sin(radians(additional_info->>'$.location.lat')))) <= ?
+                (6371 * acos(cos(radians(?)) * cos(radians(JSON_UNQUOTE(JSON_EXTRACT(additional_info, '$.location.lat')))) 
+                * cos(radians(JSON_UNQUOTE(JSON_EXTRACT(additional_info, '$.location.long'))) - radians(?)) 
+                + sin(radians(?)) * sin(radians(JSON_UNQUOTE(JSON_EXTRACT(additional_info, '$.location.lat')))))) <= ?
             ", [$lat, $long, $lat, $radius]);
         }
     }

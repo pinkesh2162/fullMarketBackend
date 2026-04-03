@@ -20,6 +20,7 @@ class DefaultUserSeeder extends Seeder
               'last_name' => 'abc',
               'email' => 'test@gmail.com',
               'password' => Hash::make('password'),
+              'email_verified_at' => now(),
           ]  
         ];
         
