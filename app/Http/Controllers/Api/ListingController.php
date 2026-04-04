@@ -9,6 +9,7 @@ use App\Http\Requests\UpdateListingRequest;
 use App\Http\Resources\FeatureListingResource;
 use App\Http\Resources\FrontListingResource;
 use App\Http\Resources\ListingResource;
+use App\Models\Favorite;
 use App\Repositories\ListingRepository;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -36,7 +37,20 @@ class ListingController extends Controller
     public function index(Request $request): JsonResponse
     {
         $perPage = @$request->perPage ?? 15;
-        $filters = $request->only(['category', 'location', 'lat', 'long', 'lng', 'radius', 'hide_ads', 'title', 'search_keyword']);
+
+        $filters = $request->only([
+            'category',
+            'location',
+            'lat',
+            'long',
+            'lng',
+            'radius',
+            'hide_ads',
+            'title',
+            'search_keyword',
+            'store_id'
+        ]);
+
         if (!isset($filters['long']) && isset($filters['lng'])) {
             $filters['long'] = $filters['lng'];
         }
@@ -156,5 +170,20 @@ class ListingController extends Controller
         $listings = $this->listingRepo->getRelatedListings($listing, $perPage);
 
         return $this->actionSuccess('related_listings_fetched', ListingResource::collection($listings));
+    }
+
+    public function getCount(Request $request): JsonResponse
+    {
+        $listingCount = Listing::toBase()
+            ->where('user_id', auth('sanctum')->id())
+            ->count();
+        $favoriteCount = Favorite::toBase()
+            ->where('user_id', auth('sanctum')->id())
+            ->count();
+
+        return $this->actionSuccess('listing_count', [
+            'listing_count' => $listingCount,
+            'favorite_count' => $favoriteCount,
+        ]);
     }
 }

@@ -7,6 +7,7 @@ use App\Http\Requests\StoreRequest;
 use App\Http\Resources\StoreResource;
 use App\Models\Store;
 use App\Repositories\StoreRepository;
+use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
 class StoreController extends Controller
@@ -21,9 +22,15 @@ class StoreController extends Controller
     /**
      * Display the authenticated user's store.
      */
-    public function show(): JsonResponse
+    public function show(Request $request): JsonResponse
     {
-        $store = Store::with('media')->where('user_id', auth()->id())->first();
+        $store = Store::with('media')
+            ->when($request->id, function ($query) use ($request) {
+                $query->where('id', $request->id);
+            }, function ($query) {
+                $query->where('user_id', auth('sanctum')->id());
+            })
+            ->first();
 
         if (!$store) {
             return $this->notFound('store_not_found');

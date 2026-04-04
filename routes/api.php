@@ -34,6 +34,7 @@ Route::get('/listings/{listing}/related', [ListingController::class, 'getRelated
 Route::post('/claim-add', [ClaimController::class, 'store']);
 Route::get('/app-settings', [AppSettingController::class, 'getAppSettings']);
 Route::get('get/listing/{id}', [ListingController::class, 'show']);
+Route::get('/store', [StoreController::class, 'show']);
 
 Route::middleware(['auth:sanctum'])->group(function () {
     //    user profile route
@@ -46,6 +47,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/get-settings', [ProfileController::class, 'getSettings']);
     Route::post('/update-settings', [ProfileController::class, 'updateSettings']);
     Route::post('/app-settings', [AppSettingController::class, 'updateAppSettings']);
+    Route::get('/get-counts', [ListingController::class, 'getCount']);
 
     // category routes
     Route::post('/categories', [CategoryController::class, 'store']);
@@ -63,7 +65,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::delete('/listings/{listing}/favorite', [FavoriteController::class, 'destroy']);
 
     // user store routes
-    Route::get('/store', [StoreController::class, 'show']);
     Route::post('/edit-store', [StoreController::class, 'update']);
     Route::post('/delete-store', [StoreController::class, 'destroy']);
 

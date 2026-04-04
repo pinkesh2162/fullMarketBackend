@@ -97,6 +97,10 @@ class Listing extends Model implements HasMedia
             $q->where('title', 'like', "%{$title}%");
         });
 
+        $query->when($filters['store_id'] ?? false, function ($q, $store_id) {
+            $q->where('store_id', $store_id);
+        });
+
         $query->when($filters['search_keyword'] ?? false, function ($q, $search_keyword) {
             $q->where('search_keyword', 'like', "%{$search_keyword}%");
         });

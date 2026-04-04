@@ -76,10 +76,10 @@ class CategoryController extends Controller
 
         $category->load('subCategories');
 
-        Cache::forget('main_categories_guest');
-        if (auth()->check()) {
-            Cache::forget('main_categories_' . auth()->id());
-        }
+        // Cache::forget('main_categories_guest');
+        // if (auth()->check()) {
+        //     Cache::forget('main_categories_' . auth()->id());
+        // }
 
         return $this->actionSuccess('category_created', new CategoryResource($category), self::HTTP_CREATED);
     }
