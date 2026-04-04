@@ -125,8 +125,8 @@ class Listing extends Model implements HasMedia
             $radius = max(0, min($filters['radius'] ?? 0, 500));
 
             $query->whereRaw("
-                (6371 * acos(cos(radians(?)) * cos(radians(JSON_UNQUOTE(JSON_EXTRACT(additional_info, '$.location.lat')))) 
-                * cos(radians(JSON_UNQUOTE(JSON_EXTRACT(additional_info, '$.location.long'))) - radians(?)) 
+                (6371 * acos(cos(radians(?)) * cos(radians(JSON_UNQUOTE(JSON_EXTRACT(additional_info, '$.location.lat'))))
+                * cos(radians(JSON_UNQUOTE(JSON_EXTRACT(additional_info, '$.location.long'))) - radians(?))
                 + sin(radians(?)) * sin(radians(JSON_UNQUOTE(JSON_EXTRACT(additional_info, '$.location.lat')))))) <= ?
             ", [$lat, $long, $lat, $radius]);
         }

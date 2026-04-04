@@ -48,7 +48,7 @@ class ListingRepository
             ->paginate($perPage);
     }
 
-    public function createListing(array $data, $images = null): Bool
+    public function createListing(array $data, $images = null)
     {
         $user = Auth::user();
         $data['user_id'] = $user->id;
@@ -73,7 +73,7 @@ class ListingRepository
             dispatch(new SendFcmNotificationJob($user->fcm_token, $title, $body));
         }
 
-        return true;
+        return $listing;
     }
 
     public function getListingById(int $id): ?Listing

@@ -119,9 +119,9 @@ class ListingController extends Controller
     public function store(StoreListingRequest $request): JsonResponse
     {
         $data = $request->validated();
-        $this->listingRepo->createListing($data, $request->file('images'));
+        $listing = $this->listingRepo->createListing($data, $request->file('images'));
 
-        return $this->actionSuccess('listing_created');
+        return $this->actionSuccess('listing_created', new ListingResource($listing));
     }
 
     public function show($id): JsonResponse
