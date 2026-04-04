@@ -15,6 +15,7 @@ class SendFcmNotificationJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    protected $userId;
     protected $token;
     protected $title;
     protected $body;
@@ -23,12 +24,13 @@ class SendFcmNotificationJob implements ShouldQueue
     /**
      * Create a new job instance.
      */
-    public function __construct($token, $title, $body, $data = [])
+    public function __construct($token, $title, $body, $data = [], $userId = null)
     {
         $this->token = $token;
         $this->title = $title;
         $this->body = $body;
         $this->data = $data;
+        $this->userId = $userId;
     }
 
     /**
@@ -36,11 +38,29 @@ class SendFcmNotificationJob implements ShouldQueue
      */
     public function handle(FcmService $fcmService): void
     {
+        // 1. Identify the user
+        $user = null;
+        if ($this->userId) {
+            $user = \App\Models\User::with('settings')->find($this->userId);
+        } elseif ($this->token) {
+            $user = \App\Models\User::where('fcm_token', $this->token)->with('settings')->first();
+        }
+
+        // 2. Store notification in database if user is found
+        if ($user) {
+            \App\Models\Notification::create([
+                'user_id' => $user->id,
+                'title'   => $this->title,
+                'body'    => $this->body,
+                'data'    => $this->data,
+            ]);
+        }
+
         if (!$this->token) {
             return;
         }
 
-        $user = \App\Models\User::where('fcm_token', $this->token)->with('settings')->first();
+        // 3. Handle FCM Push notification with custom window logic
         $settings = $user ? $user->settings : null;
 
         if ($settings && $settings->notification_time_start && $settings->notification_time_end) {
@@ -51,7 +71,6 @@ class SendFcmNotificationJob implements ShouldQueue
 
             // Handle overnight windows (e.g. 22:00 to 06:00)
             if ($start->greaterThan($end)) {
-                // If now is before end time, it means we're in the early morning part of the window (add a day to end for comparison is tricky, better to check if it's NOT between end and start)
                 if ($now->between($end, $start)) {
                     Log::info("FCM notification skipped for user [{$user->id}]. Outside custom window {$settings->notification_time_start} - {$settings->notification_time_end}.");
                     return;

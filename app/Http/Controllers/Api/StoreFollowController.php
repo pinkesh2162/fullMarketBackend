@@ -16,12 +16,12 @@ class StoreFollowController extends Controller
         auth()->user()->followedStores()->syncWithoutDetaching([$store->id]);
         $user = Auth::user();
 
-        if ($user && $user->fcm_token) { 
+        if ($user && $user->fcm_token) {
             $title = "Store Followed";
             $body = "You have followed the store '{$store->name}'.";
-            dispatch(new SendFcmNotificationJob($user->fcm_token, $title, $body));
+            dispatch_sync(new SendFcmNotificationJob($user->fcm_token, $title, $body, ['store_id' => $store->id], $user->id));
         }
-        
+
         return $this->actionSuccess('store_followed');
     }
 

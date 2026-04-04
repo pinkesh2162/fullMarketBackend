@@ -3,6 +3,7 @@
 namespace App\Repositories;
 
 use App\Exceptions\ApiOperationFailedException;
+use App\Jobs\SendFcmNotificationJob;
 use App\Models\Listing;
 use App\Models\Store;
 use Illuminate\Support\Facades\Auth;
@@ -51,7 +52,7 @@ class StoreRepository
                 if ($user && $user->fcm_token) {
                     $title = "Store Created";
                     $body = "Your store '{$store->name}' has been created successfully.";
-                    dispatch(new \App\Jobs\SendFcmNotificationJob($user->fcm_token, $title, $body));
+                    dispatch_sync(new SendFcmNotificationJob($user->fcm_token, $title, $body, ['store_id' => $store->id], $user->id));
                 }
             }
 

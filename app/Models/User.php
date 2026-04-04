@@ -133,4 +133,12 @@ class User extends Authenticatable implements HasMedia
     {
         return $this->hasOne(UserSetting::class);
     }
+
+    /**
+     * Get the notifications associated with the user.
+     */
+    public function notifications()
+    {
+        return $this->hasMany(Notification::class);
+    }
 }

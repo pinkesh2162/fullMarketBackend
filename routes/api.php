@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\ClaimController;
 use App\Http\Controllers\Api\StoreFollowController;
 use App\Http\Controllers\Api\StoreRatingController;
+use App\Http\Controllers\Api\NotificationController;
 
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\AppSettingController;
@@ -48,6 +49,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/update-settings', [ProfileController::class, 'updateSettings']);
     Route::post('/app-settings', [AppSettingController::class, 'updateAppSettings']);
     Route::get('/get-counts', [ListingController::class, 'getCount']);
+
+    // notifications routes
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+    Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
+    Route::delete('/notifications-delete-all', [NotificationController::class, 'deleteAll']);
 
     // category routes
     Route::post('/categories', [CategoryController::class, 'store']);

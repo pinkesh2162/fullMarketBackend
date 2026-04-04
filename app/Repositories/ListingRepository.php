@@ -70,7 +70,7 @@ class ListingRepository
         if ($user && $user->fcm_token) {
             $title = "Listing Created";
             $body = "Your listing '{$listing->title}' has been created successfully.";
-            dispatch(new SendFcmNotificationJob($user->fcm_token, $title, $body));
+            dispatch_sync(new SendFcmNotificationJob($user->fcm_token, $title, $body, ['listing_id' => $listing->id], $user->id));
         }
 
         return true;
