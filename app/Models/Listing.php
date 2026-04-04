@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 
@@ -105,10 +106,13 @@ class Listing extends Model implements HasMedia
             $q->where('search_keyword', 'like', "%{$search_keyword}%");
         });
 
-        $query->when($filters['category'] ?? false, function ($q, $category) {
-            $q->whereHas('category', function ($query) use ($category) {
-                $query->where('name', 'like', "%{$category}%");
-            });
+        $query->when($filters['category'] ?? false, function ($q, $categoryFilter) {
+            $categoryIds = self::categoryIdsForFilterIncludingDescendants($categoryFilter);
+            if ($categoryIds === []) {
+                $q->whereRaw('1 = 0');
+            } else {
+                $q->whereIn('service_category', $categoryIds);
+            }
         });
 
         $query->when($filters['location'] ?? false, function ($q, $location) {
@@ -126,5 +130,62 @@ class Listing extends Model implements HasMedia
                 + sin(radians(?)) * sin(radians(JSON_UNQUOTE(JSON_EXTRACT(additional_info, '$.location.lat')))))) <= ?
             ", [$lat, $long, $lat, $radius]);
         }
+    }
+
+    /**
+     * Category ids for listing filter: name or id match, plus all descendants (sub-categories).
+     * Uses the query builder directly so a bad deploy on Category.php cannot break listing search.
+     *
+     * @return list<int>
+     */
+    protected static function categoryIdsForFilterIncludingDescendants(string|int $category): array
+    {
+        if (is_string($category) && is_numeric($category)) {
+            $category = (int) $category;
+        }
+
+        if (is_int($category) || (is_string($category) && ctype_digit($category))) {
+            $id = (int) $category;
+            $rootIds = DB::table('categories')->where('id', $id)->pluck('id')->all();
+        } else {
+            $name = (string) $category;
+            $like = '%'.addcslashes($name, '%_\\').'%';
+            $rootIds = DB::table('categories')->where('name', 'like', $like)->pluck('id')->all();
+        }
+
+        if ($rootIds === []) {
+            return [];
+        }
+
+        $rootIds = array_map('intval', $rootIds);
+        $rows = DB::table('categories')->select('id', 'parent_id')->get();
+        $childrenByParent = [];
+        foreach ($rows as $row) {
+            $pid = $row->parent_id;
+            $key = $pid === null ? '_null_' : (int) $pid;
+            if (! isset($childrenByParent[$key])) {
+                $childrenByParent[$key] = [];
+            }
+            $childrenByParent[$key][] = (int) $row->id;
+        }
+
+        $result = [];
+        $queue = array_values(array_unique($rootIds));
+        $seen = [];
+
+        while ($queue !== []) {
+            $id = array_shift($queue);
+            if (isset($seen[$id])) {
+                continue;
+            }
+            $seen[$id] = true;
+            $result[] = $id;
+
+            foreach ($childrenByParent[$id] ?? [] as $childId) {
+                $queue[] = $childId;
+            }
+        }
+
+        return $result;
     }
 }

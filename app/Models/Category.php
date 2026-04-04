@@ -36,7 +36,7 @@ class Category extends Model implements HasMedia
         return $this->hasMany(Category::class, 'parent_id');
     }
 
-     public function getCategoryImageAttribute()
+    public function getCategoryImageAttribute()
     {
         /** @var Media $media */
         $media = $this->getMedia(self::CATEGORY_IMAGE)->first();
