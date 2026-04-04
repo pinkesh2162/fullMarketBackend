@@ -73,7 +73,7 @@ class ListingRepository
             dispatch_sync(new SendFcmNotificationJob($user->fcm_token, $title, $body, ['listing_id' => $listing->id], $user->id));
         }
 
-        return true;
+        return $listing;
     }
 
     public function getListingById(int $id): ?Listing

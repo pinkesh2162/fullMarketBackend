@@ -36,6 +36,7 @@ Route::post('/claim-add', [ClaimController::class, 'store']);
 Route::get('/app-settings', [AppSettingController::class, 'getAppSettings']);
 Route::get('get/listing/{id}', [ListingController::class, 'show']);
 Route::get('/store', [StoreController::class, 'show']);
+Route::post('/send-notification-test', [StoreFollowController::class, 'sendNotificationTest']);
 
 Route::middleware(['auth:sanctum'])->group(function () {
     //    user profile route
