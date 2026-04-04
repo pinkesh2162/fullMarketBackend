@@ -57,5 +57,11 @@
     "Claim not found.": "Claim not found.",
     "settings_retrieved.": "Settings retrieved successfully.",
     "settings_updated.": "Settings updated successfully.",
-    "update_fcm_token": "FCM token updated successfully."
+    "update_fcm_token": "FCM token updated successfully.",
+    "notifications_fetched": "Notifications fetched successfully",
+    "notification_marked_as_read": "Notification marked as read successfully",
+    "all_notifications_marked_as_read": "All notifications marked as read successfully",
+    "notification_deleted": "Notification deleted successfully",
+    "notifications_deleted": "Notifications deleted successfully",
+    "all_notifications_deleted": "All notifications deleted successfully"
 }

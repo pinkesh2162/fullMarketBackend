@@ -61,6 +61,21 @@ class NotificationController extends Controller
     }
 
     /**
+     * Delete a notification.
+     */
+    public function destroyAssign(Request $request): JsonResponse
+    {
+        $request->validate([
+            'ids' => 'required|array',
+        ]);
+
+        $ids = array_map('intval', $request->ids);
+        auth()->user()->notifications()->whereIn('id', $ids)->delete();
+
+        return $this->actionSuccess('notifications_deleted');
+    }
+
+    /**
      * Delete all notifications for the authenticated user.
      */
     public function deleteAll(): JsonResponse
