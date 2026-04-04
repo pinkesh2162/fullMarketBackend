@@ -73,7 +73,7 @@ class ListingRepository
             dispatch(new SendFcmNotificationJob($user->fcm_token, $title, $body));
         }
 
-        return $listing;
+        return true;
     }
 
     public function getListingById(int $id): ?Listing
@@ -104,8 +104,23 @@ class ListingRepository
 
     public function getRelatedListings(Listing $listing, $perPage = 6): LengthAwarePaginator
     {
+        $address = $listing->additional_info['location']['address'] ?? null;
+        $keywords = array_filter(array_map('trim', explode(',', $listing->search_keyword ?? '')));
+
         return Listing::with(['user', 'store', 'category'])
-            ->where('service_category', $listing->service_category)
+            ->where(function ($query) use ($listing, $address, $keywords) {
+                $query->where('service_category', $listing->service_category);
+
+                if ($address) {
+                    $query->orWhere('additional_info->location->address', 'like', "%{$address}%");
+                }
+
+                foreach ($keywords as $keyword) {
+                    if ($keyword) {
+                        $query->orWhere('search_keyword', 'like', "%{$keyword}%");
+                    }
+                }
+            })
             ->where('id', '!=', $listing->id)
             ->latest()
             ->paginate($perPage);
