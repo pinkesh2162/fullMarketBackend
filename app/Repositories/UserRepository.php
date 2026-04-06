@@ -11,41 +11,48 @@ use App\Models\Favorite;
 use App\Models\Listing;
 use App\Models\Notification;
 use App\Models\Rating;
-use App\Models\Store;
 use App\Models\User;
 use App\Models\UserSetting;
+use Exception;
+use Illuminate\Container\Container as Application;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
-class UserRepository
+class UserRepository extends BaseRepository
 {
     /**
-     * @var User
+     * @param  Application  $app
+     * @throws Exception
      */
-    protected $model;
-
-    /**
-     * UserRepository constructor.
-     *
-     * @param User $model
-     */
-    public function __construct(User $model)
+    public function __construct(Application $app)
     {
-        $this->model = $model;
+        parent::__construct($app);
     }
 
     /**
-     * Create a new user.
-     *
-     * @param array $data
-     * @return User
+     * @return array
      */
-    public function create(array $data)
+    public function getFieldsSearchable()
     {
-        return $this->model->create($data);
+        return [
+            'first_name',
+            'last_name',
+            'email',
+            'phone',
+        ];
+    }
+
+    /**
+     * @return string
+     */
+    public function model()
+    {
+        return User::class;
     }
 
     /**
@@ -59,7 +66,7 @@ class UserRepository
         try {
             return DB::transaction(function () use ($request) {
                 // If a trashed account exists with the same email, permanently delete it first
-                $trashedUser = User::withTrashed()->where('email', $request->email)->first();
+                $trashedUser = $this->model->withTrashed()->where('email', $request->email)->first();
                 if ($trashedUser && $trashedUser->trashed()) {
                     $this->forceDeleteUserAccount($trashedUser);
                 }
@@ -90,7 +97,7 @@ class UserRepository
                     'message' => 'registration_success',
                 ];
             });
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             throw new ApiOperationFailedException($e->getMessage(), 422);
         }
     }
@@ -99,11 +106,11 @@ class UserRepository
      * Find user by email.
      *
      * @param  string  $email
-     * @return User|null
+     * @return User|Builder|Model|object|null
      */
     public function findByEmail(string $email)
     {
-        return $this->model->where('email', $email)->first();
+        return $this->allQuery(['email' => $email])->first();
     }
 
     /**
@@ -136,9 +143,9 @@ class UserRepository
     }
 
     /**
-     * @param string $provider
-     * @param array $appSocialUser
-     * @return User
+     * @param  string  $provider
+     * @param  array  $appSocialUser
+     * @return Builder|Model|object
      */
     public function handleAppSocialLogin(string $provider, array $appSocialUser)
     {
@@ -146,11 +153,11 @@ class UserRepository
         $providerId = $userInfo['sub'] ?? null;
         $email = $userInfo['email'] ?? null;
 
-        $user = User::with('media')->where('provider', $provider)
-            ->where('provider_id', $providerId)->first();
+        $user = $this->allQuery(['provider' => $provider, 'provider_id' => $providerId])
+            ->with('media')->first();
 
         if (!$user && $email) {
-            $user = User::with('media')->where('email', $email)->first();
+            $user = $this->allQuery(['email' => $email])->with('media')->first();
             if ($user) {
                 // Link account
                 $user->update([
@@ -202,7 +209,7 @@ class UserRepository
             if ($user->getMedia(User::PROFILE)->isEmpty()) {
                 try {
                     $user->addMediaFromUrl($userInfo['picture'])->toMediaCollection(User::PROFILE, config('app.media_disc', 'public'));
-                } catch (\Exception $e) {
+                } catch (Exception $e) {
                     // Log error or ignore if image download fails
                     \Illuminate\Support\Facades\Log::error("Failed to download social profile picture: " . $e->getMessage());
                 }
@@ -344,7 +351,7 @@ class UserRepository
             DB::commit();
 
             return true;
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             DB::rollBack();
             throw new ApiOperationFailedException($e->getMessage(), 422);
         }
@@ -392,7 +399,7 @@ class UserRepository
             DB::commit();
 
             return true;
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             DB::rollBack();
             throw new ApiOperationFailedException($e->getMessage(), 422);
         }

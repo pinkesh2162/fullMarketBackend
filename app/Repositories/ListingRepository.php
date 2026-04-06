@@ -6,15 +6,43 @@ use App\Jobs\SendFcmNotificationJob;
 use App\Models\Favorite;
 use App\Models\Listing;
 use App\Models\SearchSuggestion;
+use Exception;
+use Illuminate\Container\Container as Application;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Spatie\MediaLibrary\MediaCollections\Exceptions\FileDoesNotExist;
-use Spatie\MediaLibrary\MediaCollections\Exceptions\FileIsTooBig;
 
-class ListingRepository
+class ListingRepository extends BaseRepository
 {
+    /**
+     * @param  Application  $app
+     * @throws Exception
+     */
+    public function __construct(Application $app)
+    {
+        parent::__construct($app);
+    }
+
+    /**
+     * @return array
+     */
+    public function getFieldsSearchable()
+    {
+        return Listing::FILTER_PARAMS;
+    }
+
+    /**
+     * @return string
+     */
+    public function model()
+    {
+        return Listing::class;
+    }
+
     /**
      * Records search terms for suggestions.
      *
@@ -55,13 +83,13 @@ class ListingRepository
         return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($filters, $perPage, $user) {
             $hideAds = $filters['hide_ads'] ?? $user?->settings?->hide_ads ?? false;
 
-            $listings = Listing::with(['media'])
-                ->when($hideAds, function ($query) {
-                    $query->where('service_type', '!=', Listing::OFFER_SERVICE);
-                })
-                ->filter($filters)
-                ->latest()
-                ->paginate($perPage);
+            $query = $this->allQuery()->with(['media'])->filter($filters);
+
+            if ($hideAds) {
+                $query->where('service_type', '!=', Listing::OFFER_SERVICE);
+            }
+
+            $listings = $query->latest()->paginate($perPage);
 
             if (!empty($filters['title']) || !empty($filters['search_keyword'])) {
                 $this->recordSearchTerm($filters['title'] ?? $filters['search_keyword']);
@@ -88,12 +116,13 @@ class ListingRepository
         return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($filters, $perPage, $user) {
             $hideAds = $filters['hide_ads'] ?? $user?->settings?->hide_ads ?? false;
 
-            $listings = Listing::with(['media'])
-                ->when($hideAds, function ($query) {
-                    $query->where('service_type', '!=', Listing::OFFER_SERVICE);
-                })
-                ->orderByDesc('views_count')
-                ->filter($filters)
+            $query = $this->allQuery()->with(['media'])->filter($filters);
+
+            if ($hideAds) {
+                $query->where('service_type', '!=', Listing::OFFER_SERVICE);
+            }
+
+            $listings = $query->orderByDesc('views_count')
                 ->latest()
                 ->paginate($perPage);
 
@@ -119,7 +148,7 @@ class ListingRepository
         $cacheKey = "my_listings_v{$version}_{$userId}_{$perPage}_{$filtersHash}";
 
         return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($filters, $perPage, $userId) {
-            return Listing::where('user_id', $userId)
+            return $this->allQuery()->where('user_id', $userId)
                 ->filter($filters)
                 ->latest()
                 ->paginate($perPage);
@@ -138,7 +167,7 @@ class ListingRepository
         $data['user_id'] = $user->id;
         $data['store_id'] = @$user->store ? $user->store->id : null;
 
-        $listing = Listing::create($data);
+        $listing = $this->create($data);
 
         if ($images && is_array($images)) {
             foreach ($images as $image) {
@@ -167,14 +196,11 @@ class ListingRepository
      * @param  array  $data
      * @param  null  $images
      *
-     * @throws FileDoesNotExist
-     * @throws FileIsTooBig
-     *
-     * @return Listing
+     * @return Builder|Builder[]|Collection|Model
      */
-    public function updateListing(Listing $listing, array $data, $images = null): Listing
+    public function updateListing(Listing $listing, array $data, $images = null)
     {
-        $listing->update($data);
+        $listing = $this->update($data, $listing->id);
 
         if ($images && is_array($images)) {
             foreach ($images as $image) {
@@ -192,11 +218,12 @@ class ListingRepository
 
     /**
      * @param  Listing  $listing
+     * @throws Exception
      * @return bool
      */
     public function deleteListing(Listing $listing): bool
     {
-        $deleted = $listing->delete();
+        $deleted = $this->delete($listing->id);
         if ($deleted) {
             $this->clearListingCache();
         }

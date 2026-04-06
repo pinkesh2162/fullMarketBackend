@@ -6,11 +6,38 @@ use App\Exceptions\ApiOperationFailedException;
 use App\Jobs\SendFcmNotificationJob;
 use App\Models\Listing;
 use App\Models\Store;
+use Illuminate\Container\Container as Application;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
-class StoreRepository
+class StoreRepository extends BaseRepository
 {
+    /**
+     * @param  Application  $app
+     */
+    public function __construct(Application $app)
+    {
+        parent::__construct($app);
+    }
+
+    /**
+     * @return array
+     */
+    public function getFieldsSearchable()
+    {
+        return [
+            'name',
+            'user_id',
+        ];
+    }
+
+    /**
+     * @return string
+     */
+    public function model()
+    {
+        return Store::class;
+    }
     /**
      * Update or Create a store for the given user.
      *
@@ -24,7 +51,7 @@ class StoreRepository
         try {
             DB::beginTransaction();
             $data = $request->all();
-            $store = Store::where('user_id', $userId)->first();
+            $store = $this->allQuery(['user_id' => $userId])->first();
 
             $data = [
                 'name' => $data['name'] ?? null,
@@ -90,7 +117,7 @@ class StoreRepository
     public function deleteStore(int $userId): bool
     {
         try {
-            $store = Store::where('user_id', $userId)->first();
+            $store = $this->allQuery(['user_id' => $userId])->first();
 
             if (!$store) {
                 throw new ApiOperationFailedException('store_not_found', 404);

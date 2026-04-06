@@ -4,25 +4,38 @@ namespace App\Repositories;
 
 use App\Http\Resources\CategoryResource;
 use App\Models\Category;
+use Illuminate\Container\Container as Application;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 
-class CategoryRepository
+class CategoryRepository extends BaseRepository
 {
     /**
-     * @var Category
+     * @param  Application  $app
      */
-    protected $model;
+    public function __construct(Application $app)
+    {
+        parent::__construct($app);
+    }
 
     /**
-     * ClaimRepository constructor.
-     *
-     * @param  Category  $model
+     * @return array
      */
-    public function __construct(Category $model)
+    public function getFieldsSearchable()
     {
-        $this->model = $model;
+        return [
+            'name',
+            'parent_id',
+        ];
+    }
+
+    /**
+     * @return string
+     */
+    public function model()
+    {
+        return Category::class;
     }
 
     /**
@@ -35,7 +48,7 @@ class CategoryRepository
         $cacheKey = "categories_v{$version}_{$userId}";
 
         return Cache::remember($cacheKey, now()->addDay(), function () {
-            $categories = $this->model->with(['subCategories.subCategories', 'media'])
+            $categories = $this->allQuery()->with(['subCategories.subCategories', 'media'])
                 ->whereNull('parent_id')
                 ->where(function ($query) {
                     $query->whereNull('user_id')
@@ -56,7 +69,7 @@ class CategoryRepository
         $cacheKey = "main_categories_v{$version}_{$userId}";
 
         return Cache::remember($cacheKey, now()->addDay(), function () {
-            $categories = $this->model->with('media')
+            $categories = $this->allQuery()->with('media')
                 ->whereNull('parent_id')
                 ->where(function ($query) {
                     $query->whereNull('user_id')
@@ -75,7 +88,7 @@ class CategoryRepository
      */
     public function store($request)
     {
-        $category = $this->model->create([
+        $category = $this->create([
             'user_id'   => auth('sanctum')->id() ?? null,
             'name'      => $request->name,
             'parent_id' => $request->parent_id ?? null,

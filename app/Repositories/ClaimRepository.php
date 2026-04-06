@@ -4,23 +4,37 @@ namespace App\Repositories;
 
 use App\Models\Claim;
 use App\Mail\ClaimMail;
+use Illuminate\Container\Container as Application;
 use Illuminate\Support\Facades\Mail;
 
-class ClaimRepository
+class ClaimRepository extends BaseRepository
 {
     /**
-     * @var Claim
+     * @param  Application  $app
      */
-    protected $model;
+    public function __construct(Application $app)
+    {
+        parent::__construct($app);
+    }
 
     /**
-     * ClaimRepository constructor.
-     *
-     * @param Claim $model
+     * @return array
      */
-    public function __construct(Claim $model)
+    public function getFieldsSearchable()
     {
-        $this->model = $model;
+        return [
+            'user_id',
+            'listing_id',
+            'status',
+        ];
+    }
+
+    /**
+     * @return string
+     */
+    public function model()
+    {
+        return Claim::class;
     }
 
     /**
@@ -32,7 +46,7 @@ class ClaimRepository
      */
     public function createClaim(array $data, $images = null)
     {
-        $claim = $this->model->create($data);
+        $claim = $this->create($data);
 
         if ($images && is_array($images)) {
             foreach ($images as $image) {
