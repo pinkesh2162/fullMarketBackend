@@ -32,8 +32,7 @@ class CategoryController extends Controller
      */
     public function getMainCategories(): JsonResponse
     {
-        $userId = auth('sanctum')->id() ?? 'guest';
-        $cacheKey = "main_categories_{$userId}";
+        // $userId = auth('sanctum')->id() ?? 'guest';
 
           $categories =  Category::with('media')
                 ->whereNull('parent_id')
@@ -62,9 +61,9 @@ class CategoryController extends Controller
     public function store(StoreCategoryRequest $request): JsonResponse
     {
         $category = Category::create([
-            'user_id' => auth()->id() ?? null,
+            'user_id' => auth('sanctum')->id() ?? null,
             'name' => $request->name,
-            'parent_id' => @$request->parent_id ?? null,
+            'parent_id' => $request->parent_id ?? null,
         ]);
 
         if (isset($request->image) && $request->image instanceof \Illuminate\Http\UploadedFile) {

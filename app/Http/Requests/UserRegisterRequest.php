@@ -26,7 +26,7 @@ class UserRegisterRequest extends FormRequest
             'name'       => 'nullable|string|max:255',
             'first_name'    => 'required_without:name|string|max:255',
             'last_name'     => 'nullable|string|max:255',
-            'email'         => 'required|string|email|max:255|unique:users',
+            'email'         => 'required|string|email|max:255|unique:users,email,NULL,id,deleted_at,NULL',
             'password'      => 'required|string|min:8',
             'phone'         => 'nullable|string|max:20',
             'phone_code'    => 'nullable|string|max:10',

@@ -6,9 +6,14 @@ use App\Exceptions\ApiOperationFailedException;
 use App\Http\Resources\UserResource;
 use App\Mail\VerifyEmailMail;
 use App\Mail\WelcomeMail;
+use App\Models\Claim;
 use App\Models\Favorite;
 use App\Models\Listing;
+use App\Models\Notification;
+use App\Models\Rating;
+use App\Models\Store;
 use App\Models\User;
+use App\Models\UserSetting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -53,6 +58,12 @@ class UserRepository
     {
         try {
             return DB::transaction(function () use ($request) {
+                // If a trashed account exists with the same email, permanently delete it first
+                $trashedUser = User::withTrashed()->where('email', $request->email)->first();
+                if ($trashedUser && $trashedUser->trashed()) {
+                    $this->forceDeleteUserAccount($trashedUser);
+                }
+
                 $data = $request->except('password');
                 $data['password'] = Hash::make($request->password);
 
@@ -330,6 +341,54 @@ class UserRepository
             $user->tokens()->delete();
 
             $user->delete();
+            DB::commit();
+
+            return true;
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw new ApiOperationFailedException($e->getMessage(), 422);
+        }
+    }
+
+    /**
+     * Permanently delete user account and all associated data.
+     *
+     * @param User $user
+     * @return bool
+     * @throws ApiOperationFailedException
+     */
+    public function forceDeleteUserAccount(User $user): bool
+    {
+        DB::beginTransaction();
+        try {
+            // 1. Delete Store and its ratings
+            if ($user->store) {
+                Rating::where('store_id', $user->store->id)->delete();
+                $user->store->delete(); // Store doesn't use SoftDeletes
+            }
+
+            // 2. Force delete Listings, Claims, and Favorites (these use SoftDeletes)
+            Listing::where('user_id', $user->id)->withTrashed()->forceDelete();
+            Claim::where('user_id', $user->id)->withTrashed()->forceDelete();
+            Favorite::where('user_id', $user->id)->withTrashed()->forceDelete();
+
+            // 3. Delete other associated data
+            // Rating::where('user_id', $user->id)->delete();
+            UserSetting::where('user_id', $user->id)->delete();
+            Notification::where('user_id', $user->id)->delete();
+
+            // 4. Delete follows
+            DB::table('follows')->where('user_id', $user->id)->delete();
+            if ($user->store) {
+                DB::table('follows')->where('store_id', $user->store->id)->delete();
+            }
+
+            // 5. Delete Sanctum tokens
+            $user->tokens()->delete();
+
+            // 6. Force delete the user
+            $user->forceDelete();
+
             DB::commit();
 
             return true;

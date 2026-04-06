@@ -130,4 +130,54 @@
             </div>
         </div>
     </body>
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        // import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+        // import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging.js";
+        //
+        // // Your web app's Firebase configuration
+        // const firebaseConfig = {
+        //     apiKey: "AIzaSyCUVgWc71QIgnBM3c0sDzQP6Acp3TPXHXc",
+        //     authDomain: "laravel-app-17d5a.firebaseapp.com",
+        //     projectId: "laravel-app-17d5a",
+        //     storageBucket: "laravel-app-17d5a.firebasestorage.app",
+        //     messagingSenderId: "1048953298805",
+        //     appId: "1:1048953298805:web:ad45519e192a6e7966fd3c",
+        //     measurementId: "G-5R20B9BP8G"
+        // };
+        //
+        // // Initialize Firebase
+        // const app = initializeApp(firebaseConfig);
+        // const messaging = getMessaging(app);
+        //
+        // async function initFCM() {
+        //     try {
+        //         const permission = await Notification.requestPermission();
+        //
+        //         if (permission === "granted") {
+        //             const token = await getToken(messaging, {
+        //                 vapidKey: "BF3dFCXt9Rg6mcd3uUVAWDNEy30JmkkMfL_ZehnzTl40pXgc30CNTDzrCWuQcZS0LfKjhTnPKJAqVhek2zJ7XfE"
+        //             });
+        //
+        //             console.log("✅ FCM TOKEN:", token);
+        //         } else {
+        //             console.log("❌ Permission denied");
+        //         }
+        //     } catch (error) {
+        //         console.error("Error getting token:", error);
+        //     }
+        // }
+        //
+        // initFCM();
+
+        // ✅ FOREGROUND MESSAGE LISTENER (ADD HERE)
+        // onMessage(messaging, (payload) => {
+        // console.log("📩 Foreground Message:", payload);
+        //
+        // alert(
+        //     payload.notification.title + "\n" +
+        //     payload.notification.body
+        // );
+        // });
+    </script>
 </html>

@@ -31,7 +31,7 @@ class ContactController extends Controller
             Contact::create($data);
 
             // Send email to the support address
-            Mail::to(config('app.admin_email'))->queue(new ContactMail($data));
+            Mail::to(config('app.admin_email'))->send(new ContactMail($data));
 
             return $this->actionSuccess('request_submitted');
         } catch (\Exception $e) {
