@@ -37,19 +37,7 @@ class ListingController extends Controller
     public function index(Request $request): JsonResponse
     {
         $perPage = @$request->perPage ?? 15;
-
-        $filters = $request->only([
-            'category',
-            'location',
-            'lat',
-            'long',
-            'lng',
-            'radius',
-            'hide_ads',
-            'title',
-            'search_keyword',
-            'store_id'
-        ]);
+        $filters = $request->only(Listing::FILTER_PARAMS);
 
         if (!isset($filters['long']) && isset($filters['lng'])) {
             $filters['long'] = $filters['lng'];
@@ -95,7 +83,8 @@ class ListingController extends Controller
     public function getFeaturedListings(Request $request): JsonResponse
     {
         $perPage = @$request->perPage ?? 3;
-        $filters = $request->only(['category', 'location', 'lat', 'long', 'lng', 'radius', 'hide_ads', 'title', 'search_keyword']);
+        $filters = $request->only(Listing::FILTER_PARAMS);
+        
         if (!isset($filters['long']) && isset($filters['lng'])) {
             $filters['long'] = $filters['lng'];
         }

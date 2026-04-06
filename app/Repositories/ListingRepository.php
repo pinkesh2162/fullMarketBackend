@@ -4,25 +4,56 @@ namespace App\Repositories;
 
 use App\Jobs\SendFcmNotificationJob;
 use App\Models\Listing;
+use App\Models\SearchSuggestion;
 use App\Services\FcmService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ListingRepository
 {
+    /**
+     * Records search terms for suggestions.
+     *
+     * @param string|null $term
+     */
+    public function recordSearchTerm(?string $term): void
+    {
+        if (empty($term)) {
+            return;
+        }
+
+        $term = strtolower(trim($term));
+        if (strlen($term) < 2) {
+            return;
+        }
+
+        // Using updateOrCreate with DB::raw to avoid race conditions and set default
+        SearchSuggestion::updateOrCreate(
+            ['term' => $term],
+            ['hits' => DB::raw('hits + 1')]
+        );
+    }
+
     public function getListings($filters = [], $perPage = 15): LengthAwarePaginator
     {
         $user = Auth::user();
         $hideAds = $filters['hide_ads'] ?? $user?->settings?->hide_ads ?? false;
 
-        return Listing::with(['media'])
+        $listings = Listing::with(['media'])
             ->when($hideAds, function ($query) {
                 $query->where('service_type', '!=', Listing::OFFER_SERVICE);
             })
             ->filter($filters)
             ->latest()
             ->paginate($perPage);
+
+        if (!empty($filters['title']) || !empty($filters['search_keyword'])) {
+            $this->recordSearchTerm($filters['title'] ?? $filters['search_keyword']);
+        }
+
+        return $listings;
     }
 
     public function getFeaturedListings($filters = [], $perPage = 3): LengthAwarePaginator

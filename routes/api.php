@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\NotificationController;
 
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\AppSettingController;
+use App\Http\Controllers\Api\SearchSuggestionController;
 
 //guest routes
 Route::post('/register', [AuthController::class, 'register']);
@@ -34,6 +35,7 @@ Route::get('/featured-listings', [ListingController::class, 'getFeaturedListings
 Route::get('/listings/{listing}/related', [ListingController::class, 'getRelatedListings']);
 Route::post('/claim-add', [ClaimController::class, 'store']);
 Route::get('/app-settings', [AppSettingController::class, 'getAppSettings']);
+Route::get('/search-suggestions', [SearchSuggestionController::class, 'index']);
 Route::get('get/listing/{id}', [ListingController::class, 'show']);
 Route::get('/store', [StoreController::class, 'show']);
 Route::post('/send-notification-test', [StoreFollowController::class, 'sendNotificationTest']);

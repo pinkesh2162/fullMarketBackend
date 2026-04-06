@@ -43,6 +43,18 @@ class Listing extends Model implements HasMedia
         'transmission',
     ];
 
+    const FILTER_PARAMS = [
+        'category',
+        'location',
+        'lat',
+        'long',
+        'lng',
+        'radius',
+        'hide_ads',
+        'title',
+        'search_keyword',
+        'store_id'
+    ];
 
     //availability
     const AVAILABLE = true;
