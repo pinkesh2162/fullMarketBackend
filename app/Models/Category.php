@@ -21,28 +21,40 @@ class Category extends Model implements HasMedia
 
     const CATEGORY_IMAGE = 'category_image';
 
+    /**
+     * @return BelongsTo
+     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
+    /**
+     * @return BelongsTo
+     */
     public function parent(): BelongsTo
     {
         return $this->belongsTo(Category::class, 'parent_id');
     }
 
+    /**
+     * @return HasMany
+     */
     public function subCategories(): HasMany
     {
         return $this->hasMany(Category::class, 'parent_id');
     }
 
+    /**
+     * @return string
+     */
     public function getCategoryImageAttribute()
     {
         /** @var Media $media */
         $media = $this->getMedia(self::CATEGORY_IMAGE)->first();
         if (! empty($media)) {
             return $media->getFullUrl();
-        }   
+        }
 
         return getUserImageInitial($this->id, $this->name);
     }
