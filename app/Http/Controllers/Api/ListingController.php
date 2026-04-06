@@ -13,6 +13,8 @@ use App\Models\Favorite;
 use App\Repositories\ListingRepository;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Spatie\MediaLibrary\MediaCollections\Exceptions\FileDoesNotExist;
+use Spatie\MediaLibrary\MediaCollections\Exceptions\FileIsTooBig;
 
 class ListingController extends Controller
 {
@@ -84,7 +86,7 @@ class ListingController extends Controller
     {
         $perPage = @$request->perPage ?? 3;
         $filters = $request->only(Listing::FILTER_PARAMS);
-        
+
         if (!isset($filters['long']) && isset($filters['lng'])) {
             $filters['long'] = $filters['lng'];
         }
@@ -113,6 +115,11 @@ class ListingController extends Controller
         return $this->actionSuccess('listing_created', new ListingResource($listing));
     }
 
+    /**
+     * @param $id
+     *
+     * @return JsonResponse
+     */
     public function show($id): JsonResponse
     {
         $listing = Listing::findOrFail($id);
@@ -125,6 +132,15 @@ class ListingController extends Controller
         return $this->actionSuccess('listing_fetched', new ListingResource($listing));
     }
 
+    /**
+     * @param  UpdateListingRequest  $request
+     * @param $id
+     *
+     * @throws FileDoesNotExist
+     * @throws FileIsTooBig
+     *
+     * @return JsonResponse
+     */
     public function update(UpdateListingRequest $request, $id): JsonResponse
     {
         $listing = Listing::findOrFail($id);
@@ -136,6 +152,11 @@ class ListingController extends Controller
         return $this->actionSuccess('listing_updated', new ListingResource($listing));
     }
 
+    /**
+     * @param $id
+     *
+     * @return JsonResponse
+     */
     public function destroy($id): JsonResponse
     {
         $listing = Listing::findOrFail($id);
@@ -161,18 +182,15 @@ class ListingController extends Controller
         return $this->actionSuccess('related_listings_fetched', ListingResource::collection($listings));
     }
 
+    /**
+     * @param  Request  $request
+     *
+     * @return JsonResponse
+     */
     public function getCount(Request $request): JsonResponse
     {
-        $listingCount = Listing::toBase()
-            ->where('user_id', auth('sanctum')->id())
-            ->count();
-        $favoriteCount = Favorite::toBase()
-            ->where('user_id', auth('sanctum')->id())
-            ->count();
+        $counts = $this->listingRepo->getCount();
 
-        return $this->actionSuccess('listing_count', [
-            'listing_count' => $listingCount,
-            'favorite_count' => $favoriteCount,
-        ]);
+        return $this->actionSuccess('listing_count', $counts);
     }
 }

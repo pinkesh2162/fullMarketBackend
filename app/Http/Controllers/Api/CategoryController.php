@@ -53,4 +53,14 @@ class CategoryController extends Controller
 
         return $this->actionSuccess('category_created', $category, self::HTTP_CREATED);
     }
+
+    /**
+     * Remove the specified resource from storage.
+     */
+    public function destroy(int $id): JsonResponse
+    {
+        $this->categoryRepo->delete($id);
+
+        return $this->actionSuccess('category_deleted');
+    }
 }
