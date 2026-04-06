@@ -35,6 +35,7 @@ Route::get('/featured-listings', [ListingController::class, 'getFeaturedListings
 Route::get('/listings/{listing}/related', [ListingController::class, 'getRelatedListings']);
 Route::post('/claim-add', [ClaimController::class, 'store']);
 Route::get('/app-settings', [AppSettingController::class, 'getAppSettings']);
+Route::post('/app-settings', [AppSettingController::class, 'updateAppSettings']);
 Route::get('/search-suggestions', [SearchSuggestionController::class, 'index']);
 Route::get('get/listing/{id}', [ListingController::class, 'show']);
 Route::get('/store', [StoreController::class, 'show']);

@@ -1,6 +1,6 @@
 [
     {
-        "title": "🧹\nHome Services",
+        "title": "Home Services",
         "icon": "🧹",
         "lists": [
             {
@@ -42,7 +42,7 @@
         ]
     },
     {
-        "title": "🛠️\nMaintenance & Repairs",
+        "title": "Maintenance & Repairs",
         "icon": "🛠️",
         "lists": [
             {
@@ -80,7 +80,7 @@
         ]
     },
     {
-        "title": "🐶\nPet Services",
+        "title": "Pet Services",
         "icon": "🐶",
         "lists": [
             {
@@ -106,7 +106,7 @@
         ]
     },
     {
-        "title": "🛒\nErrands & Food Services",
+        "title": "Errands & Food Services",
         "icon": "🛒",
         "lists": [
             {
@@ -132,7 +132,7 @@
         ]
     },
     {
-        "title": "💄\nBeauty & Personal Care",
+        "title": "Beauty & Personal Care",
         "icon": "💄",
         "lists": [
             {
@@ -158,7 +158,7 @@
         ]
     },
     {
-        "title": "🚗\nAutomotive Services",
+        "title": "Automotive Services",
         "icon": "🚗",
         "lists": [
             {
@@ -184,7 +184,7 @@
         ]
     },
     {
-        "title": "💻\nTechnology & Support",
+        "title": "Technology & Support",
         "icon": "💻",
         "lists": [
             {
@@ -242,7 +242,7 @@
         ]
     },
     {
-        "title": "🎨\nDesign & Creative Services",
+        "title": "Design & Creative Services",
         "icon": "🎨",
         "lists": [
             {
@@ -268,7 +268,7 @@
         ]
     },
     {
-        "title": "📈\nMarketing & Sales",
+        "title": "Marketing & Sales",
         "icon": "📈",
         "lists": [
             {
@@ -294,7 +294,7 @@
         ]
     },
     {
-        "title": "🏗️\nArchitecture & Engineering",
+        "title": "Architecture & Engineering",
         "icon": "🏗️",
         "lists": [
             {
@@ -316,7 +316,7 @@
         ]
     },
     {
-        "title": "🧘\nHealth & Wellness",
+        "title": "Health & Wellness",
         "icon": "🧘",
         "lists": [
             {
@@ -342,7 +342,7 @@
         ]
     },
     {
-        "title": "📚\nEducation & Training",
+        "title": "Education & Training",
         "icon": "📚",
         "lists": [
             {
@@ -368,7 +368,7 @@
         ]
     },
     {
-        "title": "💼\nOffice & Business Support",
+        "title": "Office & Business Support",
         "icon": "💼",
         "lists": [
             {
@@ -394,7 +394,7 @@
         ]
     },
     {
-        "title": "💰\nFinance & Investment",
+        "title": "Finance & Investment",
         "icon": "💰",
         "lists": [
             {
@@ -416,7 +416,7 @@
         ]
     },
     {
-        "title": "📦\nLogistics & Operations",
+        "title": "Logistics & Operations",
         "icon": "📦",
         "lists": [
             {
@@ -438,7 +438,7 @@
         ]
     },
     {
-        "title": "✈️\nTravel & Experiences",
+        "title": "Travel & Experiences",
         "icon": "✈️",
         "lists": [
             {
@@ -460,7 +460,7 @@
         ]
     },
     {
-        "title": "✨\nOther Services",
+        "title": "Other Services",
         "icon": "✨",
         "lists": [
             {

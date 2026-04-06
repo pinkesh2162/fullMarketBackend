@@ -17,9 +17,10 @@ if (! function_exists('getAvatarUrl')) {
 if (! function_exists('getRandomColor')) {
     function getRandomColor($userId)
     {
-        $colors = ['329af0', 'fc6369', 'ffaa2e', '42c9af', '7d68f0'];
-        $index = $userId % 5;
+        return 'ff0000';
+        // $colors = ['329af0', 'fc6369', 'ffaa2e', '42c9af', '7d68f0'];
+        // $index = $userId % 5;
 
-        return $colors[$index];
+        // return $colors[$index];
     }
 }
