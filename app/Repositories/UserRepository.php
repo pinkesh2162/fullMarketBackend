@@ -18,6 +18,7 @@ use Illuminate\Container\Container as Application;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -90,7 +91,9 @@ class UserRepository extends BaseRepository
 
                 // Dispatch emails to queue (NON-BLOCKING ⚡)
                 Mail::to($user->email)->send(new VerifyEmailMail($user->email, $otp));
-                Mail::to($user->email)->queue(new WelcomeMail($user, $request->password));
+
+                // Temporarily store password in cache for WelcomeMail (30 mins)
+                Cache::put('user_pass_' . $user->email, $request->password, now()->addMinutes(30));
 
                 return [
                     'user' => $user,
@@ -284,6 +287,12 @@ class UserRepository extends BaseRepository
             'otp' => null,
             'otp_expires_at' => null,
         ]);
+
+        // Retrieve temporary password if available
+        $password = Cache::pull('user_pass_' . $user->email);
+
+        // Send Welcome Mail after verification
+        Mail::to($user->email)->send(new WelcomeMail($user, $password));
 
         $token = $user->createToken('auth_token')->plainTextToken;
 

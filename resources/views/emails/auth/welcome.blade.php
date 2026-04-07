@@ -17,8 +17,10 @@
         </p>
 
         <div style="margin-bottom: 30px; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
-            <p style="margin: 0 0 10px 0; font-size: 16px;"><strong>Email:</strong> <span style="color: #007bff;">{{ $user->email }}</span></p>
-            <p style="margin: 0; font-size: 16px;"><strong>Password:</strong> {{ $password }}</p>
+            <p style="margin: 0 {{ $password ? '0 10px 0' : '' }}; font-size: 16px;"><strong>Email:</strong> <span style="color: #007bff;">{{ $user->email }}</span></p>
+            @if($password)
+                <p style="margin: 0; font-size: 16px;"><strong>Password:</strong> {{ $password }}</p>
+            @endif
         </div>
 
         <!-- App Download -->
