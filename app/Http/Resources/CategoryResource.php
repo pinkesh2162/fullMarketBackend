@@ -21,6 +21,7 @@ class CategoryResource extends JsonResource
             'parent_id' => $this->parent_id,
             'image' => $this->categoryImage,
             'sub_categories' => CategoryResource::collection($this->whenLoaded('subCategories')),
+            'used_in_listings_count' => @$this->listings_count ?? 0
             // 'created_at' => $this->created_at,
             // 'updated_at' => $this->updated_at,
         ];

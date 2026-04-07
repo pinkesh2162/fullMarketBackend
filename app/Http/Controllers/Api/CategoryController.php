@@ -58,6 +58,22 @@ class CategoryController extends Controller
     }
 
     /**
+     * Display a listing of most used categories.
+     */
+    public function getMostUsedCategories(Request $request): JsonResponse
+    {
+        $perPage = $request->per_page ?? $request->perPage ?? 15;
+        $categories = $this->categoryRepo->getMostUsedCategory($perPage);
+
+        return $this->actionSuccess(
+            'categories_fetched',
+            CategoryResource::collection($categories),
+            self::HTTP_OK,
+            // $this->customizingResponseData($categories)['pagination']
+        );
+    }
+
+    /**
      * Store a newly created category.
      */
     public function store(StoreCategoryRequest $request): JsonResponse

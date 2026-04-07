@@ -28,6 +28,7 @@ Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 
 Route::post('/contact', [ContactController::class, 'send']);
 Route::get('/main-categories', [CategoryController::class, 'getMainCategories']);
+Route::get('/most-used-categories', [CategoryController::class, 'getMostUsedCategories']);
 Route::get('/categories', [CategoryController::class, 'index']);
 
 Route::get('/listings', [ListingController::class, 'index']);

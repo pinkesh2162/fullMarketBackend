@@ -46,10 +46,10 @@ class CategoryRepository extends BaseRepository
      */
     public function getCategory($perPage = 15)
     {
-//        $version = Cache::get('category_cache_version', 1);
-//        $userId = auth('sanctum')->id() ?? 'guest';
-//        $page = Request::get('page', 1);
-//        $cacheKey = "categories_v{$version}_{$userId}_{$perPage}_{$page}";
+        //        $version = Cache::get('category_cache_version', 1);
+        //        $userId = auth('sanctum')->id() ?? 'guest';
+        //        $page = Request::get('page', 1);
+        //        $cacheKey = "categories_v{$version}_{$userId}_{$perPage}_{$page}";
 
         return $this->allQuery()->with([
             'subCategories.parent',
@@ -63,14 +63,14 @@ class CategoryRepository extends BaseRepository
                 $query->whereNull('user_id')
                     ->orWhere('user_id', auth('sanctum')->id());
             })->paginate($perPage);
-//        return Cache::remember($cacheKey, now()->addDay(), function () use ($perPage) {
-//            return $this->allQuery()->with(['subCategories.subCategories', 'media'])
-//                ->whereNull('parent_id')
-//                ->where(function ($query) {
-//                    $query->whereNull('user_id')
-//                        ->orWhere('user_id', auth('sanctum')->id());
-//                })->paginate($perPage);
-//        });
+        //        return Cache::remember($cacheKey, now()->addDay(), function () use ($perPage) {
+        //            return $this->allQuery()->with(['subCategories.subCategories', 'media'])
+        //                ->whereNull('parent_id')
+        //                ->where(function ($query) {
+        //                    $query->whereNull('user_id')
+        //                        ->orWhere('user_id', auth('sanctum')->id());
+        //                })->paginate($perPage);
+        //        });
     }
 
     /**
@@ -79,10 +79,10 @@ class CategoryRepository extends BaseRepository
      */
     public function getMainCategory($perPage = 15)
     {
-//        $version = Cache::get('category_cache_version', 1);
-//        $userId = auth('sanctum')->id() ?? 'guest';
-//        $page = Request::get('page', 1);
-//        $cacheKey = "main_categories_v{$version}_{$userId}_{$perPage}_{$page}";
+        //        $version = Cache::get('category_cache_version', 1);
+        //        $userId = auth('sanctum')->id() ?? 'guest';
+        //        $page = Request::get('page', 1);
+        //        $cacheKey = "main_categories_v{$version}_{$userId}_{$perPage}_{$page}";
 
         return $this->allQuery()->with('media')
             ->whereNull('parent_id')
@@ -92,15 +92,31 @@ class CategoryRepository extends BaseRepository
             })
             ->paginate($perPage);
 
-//        return Cache::remember($cacheKey, now()->addDay(), function () use ($perPage) {
-//            return $this->allQuery()->with('media')
-//                ->whereNull('parent_id')
-//                ->where(function ($query) {
-//                    $query->whereNull('user_id')
-//                        ->orWhere('user_id', auth('sanctum')->id());
-//                })
-//                ->paginate($perPage);
-//        });
+        //        return Cache::remember($cacheKey, now()->addDay(), function () use ($perPage) {
+        //            return $this->allQuery()->with('media')
+        //                ->whereNull('parent_id')
+        //                ->where(function ($query) {
+        //                    $query->whereNull('user_id')
+        //                        ->orWhere('user_id', auth('sanctum')->id());
+        //                })
+        //                ->paginate($perPage);
+        //        });
+    }
+
+    /**
+     * @param int $perPage
+     */
+    public function getMostUsedCategory($perPage = 15)
+    {
+        return $this->allQuery()->withCount('listings')
+            ->with('media')
+            ->whereNull('parent_id')
+            ->where(function ($query) {
+                $query->whereNull('user_id')
+                    ->orWhere('user_id', auth('sanctum')->id());
+            })
+            ->orderBy('listings_count', 'desc')->get();
+            // ->paginate($perPage);
     }
 
     /**
@@ -123,7 +139,7 @@ class CategoryRepository extends BaseRepository
             );
         }
 
-//        $this->clearCategoryCache();
+        //        $this->clearCategoryCache();
 
         return CategoryResource::make($category);
     }
@@ -148,6 +164,6 @@ class CategoryRepository extends BaseRepository
             throw new \Exception('Category not found');
         }
         $category->delete();
-//        $this->clearCategoryCache();
+        //        $this->clearCategoryCache();
     }
 }

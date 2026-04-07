@@ -48,6 +48,14 @@ class Category extends Model implements HasMedia
     }
 
     /**
+     * @return HasMany
+     */
+    public function listings(): HasMany
+    {
+        return $this->hasMany(Listing::class, 'service_category');
+    }
+
+    /**
      * Custom user categories → one default PNG. System categories → config map (per name,
      * including each subcategory) before seeded SVG media so listings show distinct raster icons.
      * If no map entry: uploaded media, then parent map, then global default.
