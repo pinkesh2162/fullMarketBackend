@@ -53,25 +53,30 @@ class Listing extends Model implements HasMedia
         'hide_ads',
         'title',
         'search_keyword',
-        'store_id'
+        'store_id',
     ];
 
-    //availability
+    // availability
     const AVAILABLE = true;
+
     const SOLD = false;
 
-    //listing_type
+    // listing_type
     const FOR_SALE = 1;
+
     const FOR_RENT = 0;
 
-    //listing service_type types
+    // listing service_type types
     const OFFER_SERVICE = 'offer_service';
+
     const ARTICLE_FOR_SALE = 'article_for_sale';
+
     const PROPERTY_FOR_SALE = 'property_for_sale';
+
     const VEHICLE_FOR_SALE = 'vehicle_for_sale';
 
     protected $casts = [
-        'service_modality' => 'boolean',
+        'service_modality' => 'string',
         'contact_info' => 'array',
         'additional_info' => 'array',
         'advance_options' => 'array',
@@ -95,12 +100,15 @@ class Listing extends Model implements HasMedia
 
     public function getImagesAttribute()
     {
-        $media = $this->getMedia(self::LISTING_IMAGES);
+        $media = $this->getMedia(self::LISTING_IMAGES)->sortBy(function ($item) {
+            return $item->order_column ?? $item->id;
+        })->values();
         if ($media->isNotEmpty()) {
             return $media->map(function ($item) {
                 return $item->getFullUrl();
             });
         }
+
         return [];
     }
 
@@ -146,43 +154,108 @@ class Listing extends Model implements HasMedia
 
     /**
      * Category ids for listing filter: name or id match, plus all descendants (sub-categories).
-     * Uses the query builder directly so a bad deploy on Category.php cannot break listing search.
      *
+     * Name search loads all categories once, matches in PHP (normalization + tokens), and also
+     * matches when the **parent** row name matches so listings stored under sub-categories still
+     * resolve when filtering by the main category label. Each matched id is expanded with BFS
+     * to include its full subtree (main + all nested sub-categories).
+     *
+     * @param  string|int|array<string|int>  $category
      * @return list<int>
      */
-    protected static function categoryIdsForFilterIncludingDescendants(string|int $category): array
+    protected static function categoryIdsForFilterIncludingDescendants(string|int|array $category): array
     {
-        if (is_string($category) && is_numeric($category)) {
-            $category = (int) $category;
+        if (is_array($category)) {
+            $category = reset($category);
+            if ($category === false) {
+                return [];
+            }
         }
 
-        if (is_int($category) || (is_string($category) && ctype_digit($category))) {
-            $id = (int) $category;
-            $rootIds = DB::table('categories')->where('id', $id)->pluck('id')->all();
-        } else {
-            $name = (string) $category;
-            $like = '%'.addcslashes($name, '%_\\').'%';
-            $rootIds = DB::table('categories')->where('name', 'like', $like)->pluck('id')->all();
+        if (is_string($category)) {
+            $category = trim(preg_replace('/\s+/u', ' ', $category) ?? $category);
+            if ($category === '') {
+                return [];
+            }
+            if (ctype_digit($category)) {
+                $category = (int) $category;
+            }
         }
 
-        if ($rootIds === []) {
+        $rows = DB::table('categories')->select('id', 'parent_id', 'name')->get();
+        if ($rows->isEmpty()) {
             return [];
         }
 
-        $rootIds = array_map('intval', $rootIds);
-        $rows = DB::table('categories')->select('id', 'parent_id')->get();
-        $childrenByParent = [];
+        $byId = [];
         foreach ($rows as $row) {
-            $pid = $row->parent_id;
-            $key = $pid === null ? '_null_' : (int) $pid;
-            if (! isset($childrenByParent[$key])) {
-                $childrenByParent[$key] = [];
-            }
-            $childrenByParent[$key][] = (int) $row->id;
+            $byId[(int) $row->id] = $row;
         }
 
+        $childrenByParent = [];
+        foreach ($rows as $row) {
+            if ($row->parent_id === null) {
+                continue;
+            }
+            $p = (int) $row->parent_id;
+            if (! isset($childrenByParent[$p])) {
+                $childrenByParent[$p] = [];
+            }
+            $childrenByParent[$p][] = (int) $row->id;
+        }
+
+        if (is_int($category) || (is_string($category) && ctype_digit((string) $category))) {
+            $id = (int) $category;
+            if (! isset($byId[$id])) {
+                return [];
+            }
+
+            return self::categorySubtreeIdsBreadthFirst($id, $childrenByParent);
+        }
+
+        $search = (string) $category;
+        $expandRoots = [];
+
+        foreach ($rows as $row) {
+            $rid = (int) $row->id;
+            if (self::categoryFilterNameMatches($search, (string) $row->name)) {
+                $expandRoots[$rid] = true;
+            }
+        }
+
+        foreach ($rows as $row) {
+            if ($row->parent_id === null) {
+                continue;
+            }
+            $pid = (int) $row->parent_id;
+            $parent = $byId[$pid] ?? null;
+            if ($parent !== null && self::categoryFilterNameMatches($search, (string) $parent->name)) {
+                $expandRoots[$pid] = true;
+            }
+        }
+
+        if ($expandRoots === []) {
+            return [];
+        }
+
+        $merged = [];
+        foreach (array_keys($expandRoots) as $rootId) {
+            foreach (self::categorySubtreeIdsBreadthFirst((int) $rootId, $childrenByParent) as $cid) {
+                $merged[$cid] = true;
+            }
+        }
+
+        return array_map('intval', array_keys($merged));
+    }
+
+    /**
+     * @param  array<int, list<int>>  $childrenByParent
+     * @return list<int>
+     */
+    protected static function categorySubtreeIdsBreadthFirst(int $rootId, array $childrenByParent): array
+    {
         $result = [];
-        $queue = array_values(array_unique($rootIds));
+        $queue = [$rootId];
         $seen = [];
 
         while ($queue !== []) {
@@ -192,12 +265,51 @@ class Listing extends Model implements HasMedia
             }
             $seen[$id] = true;
             $result[] = $id;
-
             foreach ($childrenByParent[$id] ?? [] as $childId) {
-                $queue[] = $childId;
+                if (! isset($seen[$childId])) {
+                    $queue[] = $childId;
+                }
             }
         }
 
         return $result;
+    }
+
+    /**
+     * Flexible name match for API filter (case, spacing, punctuation).
+     */
+    protected static function categoryFilterNameMatches(string $search, string $categoryName): bool
+    {
+        $a = self::normalizeCategoryFilterString($search);
+        $b = self::normalizeCategoryFilterString($categoryName);
+        if ($a === '' || $b === '') {
+            return false;
+        }
+        if ($a === $b) {
+            return true;
+        }
+        if (mb_strlen($a) >= 3 && str_contains($b, $a)) {
+            return true;
+        }
+        $tokens = array_values(array_filter(explode(' ', $a), fn ($t) => mb_strlen($t) >= 2));
+        if ($tokens === []) {
+            return false;
+        }
+        foreach ($tokens as $t) {
+            if (! str_contains($b, $t)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    protected static function normalizeCategoryFilterString(string $s): string
+    {
+        $s = mb_strtolower(trim($s), 'UTF-8');
+        $s = preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $s) ?? $s;
+        $s = preg_replace('/\s+/u', ' ', $s) ?? $s;
+
+        return trim($s);
     }
 }

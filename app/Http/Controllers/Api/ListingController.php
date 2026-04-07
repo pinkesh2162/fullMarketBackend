@@ -176,10 +176,30 @@ class ListingController extends Controller
      */
     public function getRelatedListings(Listing $listing, Request $request): JsonResponse
     {
-        $perPage = $request->per_page ?? $request->perPage ?? 6;
-        $listings = $this->listingRepo->getRelatedListings($listing, $perPage);
+        $relatedCfg = config('listing.related', []);
+        $defaultPerPage = (int) ($relatedCfg['per_page'] ?? 10);
+        $maxPerPage = (int) ($relatedCfg['max_per_page'] ?? 24);
 
-        return $this->actionSuccess('related_listings_fetched', ListingResource::collection($listings));
+        $perPage = (int) $request->input('perPage', $request->input('limit', $request->input('per_page', $defaultPerPage)));
+        if ($perPage < 1) {
+            $perPage = $defaultPerPage;
+        }
+        $perPage = min($maxPerPage, $perPage);
+
+        $page = $request->integer('page', 0);
+        if ($page < 1) {
+            $offset = max(0, $request->integer('offset', 0));
+            $page = (int) floor($offset / max(1, $perPage)) + 1;
+        }
+
+        $listings = $this->listingRepo->getRelatedListings($listing, $perPage, $page);
+
+        return $this->actionSuccess(
+            'related_listings_fetched',
+            ListingResource::collection($listings),
+            self::HTTP_OK,
+            $this->customizingResponseData($listings)['pagination']
+        );
     }
 
     /**

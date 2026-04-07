@@ -51,7 +51,13 @@ class CategoryRepository extends BaseRepository
 //        $page = Request::get('page', 1);
 //        $cacheKey = "categories_v{$version}_{$userId}_{$perPage}_{$page}";
 
-        return $this->allQuery()->with(['subCategories.subCategories', 'media'])
+        return $this->allQuery()->with([
+            'subCategories.parent',
+            'subCategories.media',
+            'subCategories.subCategories.parent',
+            'subCategories.subCategories.media',
+            'media',
+        ])
             ->whereNull('parent_id')
             ->where(function ($query) {
                 $query->whereNull('user_id')
