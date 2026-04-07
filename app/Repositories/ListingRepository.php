@@ -72,31 +72,46 @@ class ListingRepository extends BaseRepository
      *
      * @return LengthAwarePaginator
      */
-    public function getListings($filters = [], $perPage = 15): LengthAwarePaginator
+    public function getListings($filters = [], $perPage = 15)
     {
-        $version = Cache::get('listing_cache_version', 1);
+//        $version = Cache::get('listing_cache_version', 1);
         $user = Auth::user();
-        $userId = $user?->id ?? 'guest';
-        $filtersHash = md5(serialize($filters));
-        $cacheKey = "listings_v{$version}_{$userId}_{$perPage}_{$filtersHash}";
+//        $userId = $user?->id ?? 'guest';
+//        $filtersHash = md5(serialize($filters));
+        $hideAds = $filters['hide_ads'] ?? $user?->settings?->hide_ads ?? false;
 
-        return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($filters, $perPage, $user) {
-            $hideAds = $filters['hide_ads'] ?? $user?->settings?->hide_ads ?? false;
+        $query = $this->allQuery()->with(['media'])->filter($filters);
 
-            $query = $this->allQuery()->with(['media'])->filter($filters);
+        if ($hideAds) {
+            $query->where('service_type', '!=', Listing::OFFER_SERVICE);
+        }
 
-            if ($hideAds) {
-                $query->where('service_type', '!=', Listing::OFFER_SERVICE);
-            }
+        $listings = $query->latest()->paginate($perPage);
 
-            $listings = $query->latest()->paginate($perPage);
+        if (!empty($filters['title']) || !empty($filters['search_keyword'])) {
+            $this->recordSearchTerm($filters['title'] ?? $filters['search_keyword']);
+        }
 
-            if (!empty($filters['title']) || !empty($filters['search_keyword'])) {
-                $this->recordSearchTerm($filters['title'] ?? $filters['search_keyword']);
-            }
+        return $listings;
+//        $cacheKey = "listings_v{$version}_{$userId}_{$perPage}_{$filtersHash}";
 
-            return $listings;
-        });
+//        return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($filters, $perPage, $user) {
+//            $hideAds = $filters['hide_ads'] ?? $user?->settings?->hide_ads ?? false;
+//
+//            $query = $this->allQuery()->with(['media'])->filter($filters);
+//
+//            if ($hideAds) {
+//                $query->where('service_type', '!=', Listing::OFFER_SERVICE);
+//            }
+//
+//            $listings = $query->latest()->paginate($perPage);
+//
+//            if (!empty($filters['title']) || !empty($filters['search_keyword'])) {
+//                $this->recordSearchTerm($filters['title'] ?? $filters['search_keyword']);
+//            }
+//
+//            return $listings;
+//        });
     }
 
     /**
@@ -105,33 +120,50 @@ class ListingRepository extends BaseRepository
      *
      * @return LengthAwarePaginator
      */
-    public function getFeaturedListings($filters = [], $perPage = 3): LengthAwarePaginator
+    public function getFeaturedListings($filters = [], $perPage = 3)
     {
-        $version = Cache::get('listing_cache_version', 1);
+//        $version = Cache::get('listing_cache_version', 1);
         $user = Auth::user();
-        $userId = $user?->id ?? 'guest';
-        $filtersHash = md5(serialize($filters));
-        $cacheKey = "featured_listings_v{$version}_{$userId}_{$perPage}_{$filtersHash}";
+//        $userId = $user?->id ?? 'guest';
+//        $filtersHash = md5(serialize($filters));
+//        $cacheKey = "featured_listings_v{$version}_{$userId}_{$perPage}_{$filtersHash}";
 
-        return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($filters, $perPage, $user) {
-            $hideAds = $filters['hide_ads'] ?? $user?->settings?->hide_ads ?? false;
+        $hideAds = $filters['hide_ads'] ?? $user?->settings?->hide_ads ?? false;
 
-            $query = $this->allQuery()->with(['media'])->filter($filters);
+        $query = $this->allQuery()->with(['media'])->filter($filters);
 
-            if ($hideAds) {
-                $query->where('service_type', '!=', Listing::OFFER_SERVICE);
-            }
+        if ($hideAds) {
+            $query->where('service_type', '!=', Listing::OFFER_SERVICE);
+        }
 
-            $listings = $query->orderByDesc('views_count')
-                ->latest()
-                ->paginate($perPage);
+        $listings = $query->orderByDesc('views_count')
+            ->latest()
+            ->paginate($perPage);
 
-            if (!empty($filters['search_keyword'])) {
-                $this->recordSearchTerm($filters['search_keyword']);
-            }
+        if (!empty($filters['search_keyword'])) {
+            $this->recordSearchTerm($filters['search_keyword']);
+        }
 
-            return $listings;
-        });
+        return $listings;
+//        return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($filters, $perPage, $user) {
+//            $hideAds = $filters['hide_ads'] ?? $user?->settings?->hide_ads ?? false;
+//
+//            $query = $this->allQuery()->with(['media'])->filter($filters);
+//
+//            if ($hideAds) {
+//                $query->where('service_type', '!=', Listing::OFFER_SERVICE);
+//            }
+//
+//            $listings = $query->orderByDesc('views_count')
+//                ->latest()
+//                ->paginate($perPage);
+//
+//            if (!empty($filters['search_keyword'])) {
+//                $this->recordSearchTerm($filters['search_keyword']);
+//            }
+//
+//            return $listings;
+//        });
     }
 
     /**
@@ -140,19 +172,24 @@ class ListingRepository extends BaseRepository
      *
      * @return LengthAwarePaginator
      */
-    public function getMyListings($filters = [], $perPage = 15): LengthAwarePaginator
+    public function getMyListings($filters = [], $perPage = 15)
     {
-        $version = Cache::get('listing_cache_version', 1);
+//        $version = Cache::get('listing_cache_version', 1);
         $userId = Auth::id();
-        $filtersHash = md5(serialize($filters));
-        $cacheKey = "my_listings_v{$version}_{$userId}_{$perPage}_{$filtersHash}";
+//        $filtersHash = md5(serialize($filters));
+//        $cacheKey = "my_listings_v{$version}_{$userId}_{$perPage}_{$filtersHash}";
 
-        return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($filters, $perPage, $userId) {
-            return $this->allQuery()->where('user_id', $userId)
-                ->filter($filters)
-                ->latest()
-                ->paginate($perPage);
-        });
+        return $this->allQuery()->where('user_id', $userId)
+            ->filter($filters)
+            ->latest()
+            ->paginate($perPage);
+
+//        return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($filters, $perPage, $userId) {
+//            return $this->allQuery()->where('user_id', $userId)
+//                ->filter($filters)
+//                ->latest()
+//                ->paginate($perPage);
+//        });
     }
 
     /**
@@ -186,7 +223,7 @@ class ListingRepository extends BaseRepository
             dispatch_sync(new SendFcmNotificationJob($user->fcm_token, $title, $body, ['listing_id' => $listing->id], $user->id));
         }
 
-        $this->clearListingCache();
+//        $this->clearListingCache();
 
         return $listing;
     }
@@ -211,7 +248,7 @@ class ListingRepository extends BaseRepository
             }
         }
 
-        $this->clearListingCache();
+//        $this->clearListingCache();
 
         return $listing->fresh(['user', 'store', 'category']);
     }
@@ -224,9 +261,9 @@ class ListingRepository extends BaseRepository
     public function deleteListing(Listing $listing): bool
     {
         $deleted = $this->delete($listing->id);
-        if ($deleted) {
-            $this->clearListingCache();
-        }
+//        if ($deleted) {
+//            $this->clearListingCache();
+//        }
         return $deleted;
     }
 
@@ -253,7 +290,7 @@ class ListingRepository extends BaseRepository
      *
      * @return LengthAwarePaginator
      */
-    public function getRelatedListings(Listing $listing, $perPage = 6): LengthAwarePaginator
+    public function getRelatedListings(Listing $listing, $perPage = 6)
     {
         $address = $listing->additional_info['location']['address'] ?? null;
         $keywords = array_filter(array_map('trim', explode(',', $listing->search_keyword ?? '')));

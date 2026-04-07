@@ -177,6 +177,8 @@ class Controller extends BaseController
                 'from' => $list->firstItem(),
                 'to' => $list->lastItem(),
                 'has_more_pages' => $list->hasMorePages(),
+                'prev_page_url' => $list->previousPageUrl(),
+                'next_page_url' => $list->nextPageUrl(),
             ],
         ];
     }

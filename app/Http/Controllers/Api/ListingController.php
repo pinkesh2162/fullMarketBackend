@@ -38,7 +38,7 @@ class ListingController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $perPage = @$request->perPage ?? 15;
+        $perPage = $request->per_page ?? $request->perPage ?? 15;
         $filters = $request->only(Listing::FILTER_PARAMS);
 
         if (!isset($filters['long']) && isset($filters['lng'])) {
@@ -61,7 +61,7 @@ class ListingController extends Controller
      */
     public function getMyListing(Request $request): JsonResponse
     {
-        $perPage = @$request->perPage ?? 15;
+        $perPage = $request->per_page ?? $request->perPage ?? 15;
 
         $filters = $request->only(['category', 'location', 'lat', 'long', 'lng', 'radius', 'hide_ads', 'title', 'search_keyword']);
         if (!isset($filters['long']) && isset($filters['lng'])) {
@@ -84,7 +84,7 @@ class ListingController extends Controller
      */
     public function getFeaturedListings(Request $request): JsonResponse
     {
-        $perPage = @$request->perPage ?? 3;
+        $perPage = $request->per_page ?? $request->perPage ?? 3;
         $filters = $request->only(Listing::FILTER_PARAMS);
 
         if (!isset($filters['long']) && isset($filters['lng'])) {
@@ -176,7 +176,7 @@ class ListingController extends Controller
      */
     public function getRelatedListings(Listing $listing, Request $request): JsonResponse
     {
-        $perPage = @$request->perPage ?? 6;
+        $perPage = $request->per_page ?? $request->perPage ?? 6;
         $listings = $this->listingRepo->getRelatedListings($listing, $perPage);
 
         return $this->actionSuccess('related_listings_fetched', ListingResource::collection($listings));

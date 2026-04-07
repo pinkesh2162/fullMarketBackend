@@ -7,7 +7,9 @@ use App\Models\Category;
 use Illuminate\Container\Container as Application;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Request;
 
 class CategoryRepository extends BaseRepository
 {
@@ -39,46 +41,60 @@ class CategoryRepository extends BaseRepository
     }
 
     /**
-     * @return AnonymousResourceCollection
+     * @param int $perPage
+     * @return LengthAwarePaginator
      */
-    public function getCategory()
+    public function getCategory($perPage = 15)
     {
-        $version = Cache::get('category_cache_version', 1);
-        $userId = auth('sanctum')->id() ?? 'guest';
-        $cacheKey = "categories_v{$version}_{$userId}";
+//        $version = Cache::get('category_cache_version', 1);
+//        $userId = auth('sanctum')->id() ?? 'guest';
+//        $page = Request::get('page', 1);
+//        $cacheKey = "categories_v{$version}_{$userId}_{$perPage}_{$page}";
 
-        return Cache::remember($cacheKey, now()->addDay(), function () {
-            $categories = $this->allQuery()->with(['subCategories.subCategories', 'media'])
-                ->whereNull('parent_id')
-                ->where(function ($query) {
-                    $query->whereNull('user_id')
-                        ->orWhere('user_id', auth('sanctum')->id());
-                })->get();
-
-            return CategoryResource::collection($categories);
-        });
+        return $this->allQuery()->with(['subCategories.subCategories', 'media'])
+            ->whereNull('parent_id')
+            ->where(function ($query) {
+                $query->whereNull('user_id')
+                    ->orWhere('user_id', auth('sanctum')->id());
+            })->paginate($perPage);
+//        return Cache::remember($cacheKey, now()->addDay(), function () use ($perPage) {
+//            return $this->allQuery()->with(['subCategories.subCategories', 'media'])
+//                ->whereNull('parent_id')
+//                ->where(function ($query) {
+//                    $query->whereNull('user_id')
+//                        ->orWhere('user_id', auth('sanctum')->id());
+//                })->paginate($perPage);
+//        });
     }
 
     /**
-     * @return AnonymousResourceCollection
+     * @param int $perPage
+     * @return LengthAwarePaginator
      */
-    public function getMainCategory()
+    public function getMainCategory($perPage = 15)
     {
-        $version = Cache::get('category_cache_version', 1);
-        $userId = auth('sanctum')->id() ?? 'guest';
-        $cacheKey = "main_categories_v{$version}_{$userId}";
+//        $version = Cache::get('category_cache_version', 1);
+//        $userId = auth('sanctum')->id() ?? 'guest';
+//        $page = Request::get('page', 1);
+//        $cacheKey = "main_categories_v{$version}_{$userId}_{$perPage}_{$page}";
 
-        return Cache::remember($cacheKey, now()->addDay(), function () {
-            $categories = $this->allQuery()->with('media')
-                ->whereNull('parent_id')
-                ->where(function ($query) {
-                    $query->whereNull('user_id')
-                        ->orWhere('user_id', auth('sanctum')->id());
-                })
-                ->get();
+        return $this->allQuery()->with('media')
+            ->whereNull('parent_id')
+            ->where(function ($query) {
+                $query->whereNull('user_id')
+                    ->orWhere('user_id', auth('sanctum')->id());
+            })
+            ->paginate($perPage);
 
-            return CategoryResource::collection($categories);
-        });
+//        return Cache::remember($cacheKey, now()->addDay(), function () use ($perPage) {
+//            return $this->allQuery()->with('media')
+//                ->whereNull('parent_id')
+//                ->where(function ($query) {
+//                    $query->whereNull('user_id')
+//                        ->orWhere('user_id', auth('sanctum')->id());
+//                })
+//                ->paginate($perPage);
+//        });
     }
 
     /**
@@ -101,7 +117,7 @@ class CategoryRepository extends BaseRepository
             );
         }
 
-        $this->clearCategoryCache();
+//        $this->clearCategoryCache();
 
         return CategoryResource::make($category);
     }
@@ -126,6 +142,6 @@ class CategoryRepository extends BaseRepository
             throw new \Exception('Category not found');
         }
         $category->delete();
-        $this->clearCategoryCache();
+//        $this->clearCategoryCache();
     }
 }

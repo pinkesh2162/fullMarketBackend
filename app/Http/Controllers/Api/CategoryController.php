@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Resources\CategoryResource;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreCategoryRequest;
 use App\Repositories\CategoryRepository;
@@ -29,19 +30,31 @@ class CategoryController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $categories = $this->categoryRepo->getCategory();
+        $perPage = $request->per_page ?? $request->perPage ?? 15;
+        $categories = $this->categoryRepo->getCategory($perPage);
 
-        return $this->actionSuccess('categories_fetched', $categories);
+        return $this->actionSuccess(
+            'categories_fetched',
+            CategoryResource::collection($categories),
+            self::HTTP_OK,
+            $this->customizingResponseData($categories)['pagination']
+        );
     }
 
     /**
      * Display a listing of main categories.
      */
-    public function getMainCategories(): JsonResponse
+    public function getMainCategories(Request $request): JsonResponse
     {
-        $categories = $this->categoryRepo->getMainCategory();
+        $perPage = $request->per_page ?? $request->perPage ?? 15;
+        $categories = $this->categoryRepo->getMainCategory($perPage);
 
-        return $this->actionSuccess('categories_fetched', $categories);
+        return $this->actionSuccess(
+            'categories_fetched',
+            CategoryResource::collection($categories),
+            self::HTTP_OK,
+            $this->customizingResponseData($categories)['pagination']
+        );
     }
 
     /**
