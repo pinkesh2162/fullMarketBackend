@@ -158,6 +158,18 @@ class Listing extends Model implements HasMedia
     }
 
     /**
+     * Same `service_category` id set as `GET /listings?category=…` (id or name).
+     * Use for aggregations (e.g. most-used categories) so counts match listing search.
+     *
+     * @param  string|int|array<string|int>  $category
+     * @return list<int>
+     */
+    public static function serviceCategoryIdsForFilter(string|int|array $category): array
+    {
+        return self::categoryIdsForFilterIncludingDescendants($category);
+    }
+
+    /**
      * Category ids for listing filter: name or id match, plus all descendants (sub-categories).
      *
      * Name search loads all categories once, matches in PHP (normalization + tokens), and also
