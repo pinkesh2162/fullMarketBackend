@@ -108,15 +108,58 @@ class CategoryRepository extends BaseRepository
      */
     public function getMostUsedCategory($perPage = 15)
     {
-        return $this->allQuery()->withCount('listings')
+        $user = auth('sanctum')->user();
+        $hideAds = $user?->settings?->hide_ads ?? false;
+
+        // 1. Get filtered counts per category ID
+        $countsByCategoryId = \App\Models\Listing::select('service_category', \Illuminate\Support\Facades\DB::raw('count(*) as count'))
+            ->where(function ($q) {
+                $q->where('availability', true)->orWhereNull('availability');
+            })
+            ->when($hideAds, function ($q) {
+                $q->where('service_type', '!=', \App\Models\Listing::OFFER_SERVICE);
+            })
+            ->whereNotNull('service_category')
+            ->groupBy('service_category')
+            ->pluck('count', 'service_category')
+            ->all();
+
+        // 2. Get all categories to build hierarchy
+        $allCategories = Category::select('id', 'parent_id')->get();
+        $childrenByParent = [];
+        foreach ($allCategories as $cat) {
+            if ($cat->parent_id) {
+                $childrenByParent[$cat->parent_id][] = $cat->id;
+            }
+        }
+
+        // 3. Helper to sum counts recursively
+        $sumRecursive = function ($catId, $childrenByParent, $countsByCategoryId, &$sumRecursive) {
+            $total = (int) ($countsByCategoryId[$catId] ?? 0);
+            if (isset($childrenByParent[$catId])) {
+                foreach ($childrenByParent[$catId] as $childId) {
+                    $total += $sumRecursive($childId, $childrenByParent, $countsByCategoryId, $sumRecursive);
+                }
+            }
+            return $total;
+        };
+
+        // 4. Get main categories and assign total counts
+        $mainCategories = $this->allQuery()
             ->with('media')
             ->whereNull('parent_id')
-            ->where(function ($query) {
+            ->where(function ($query) use ($user) {
                 $query->whereNull('user_id')
-                    ->orWhere('user_id', auth('sanctum')->id());
+                    ->orWhere('user_id', $user?->id);
             })
-            ->orderBy('listings_count', 'desc')->get();
-            // ->paginate($perPage);
+            ->get();
+
+        foreach ($mainCategories as $category) {
+            $category->listings_count = $sumRecursive((int)$category->id, $childrenByParent, $countsByCategoryId, $sumRecursive);
+        }
+
+        // 5. Sort by counts and return
+        return $mainCategories->sortByDesc('listings_count')->values();
     }
 
     /**
