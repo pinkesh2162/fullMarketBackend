@@ -123,7 +123,12 @@ class Listing extends Model implements HasMedia
         });
 
         $query->when($filters['search_keyword'] ?? false, function ($q, $search_keyword) {
-            $q->where('search_keyword', 'like', "%{$search_keyword}%");
+            $term = '%'.addcslashes((string) $search_keyword, '%_\\').'%';
+            $q->where(function ($q2) use ($term) {
+                $q2->where('search_keyword', 'like', $term)
+                    ->orWhere('title', 'like', $term)
+                    ->orWhere('description', 'like', $term);
+            });
         });
 
         $query->when($filters['category'] ?? false, function ($q, $categoryFilter) {
