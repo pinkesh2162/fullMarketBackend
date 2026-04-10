@@ -18,9 +18,11 @@ class ApiOperationFailedException extends Exception
      * @param Exception|null $previous
      * @param mixed     $data
      */
-    public function __construct(string $message = '', int $code = 0, ?Exception $previous = null, mixed $data = null)
+    public function __construct(string $message = '', $code = 0, ?Exception $previous = null, mixed $data = null)
     {
-        if ($code === 0) {
+        // Ensure code is a valid HTTP status code integer
+        $code = (int) $code;
+        if ($code < 100 || $code >= 600) {
             $code = Response::HTTP_BAD_REQUEST;
         }
 

@@ -12,10 +12,12 @@ use Laravel\Sanctum\HasApiTokens;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 
+use App\Traits\CanInteractSocially;
+
 class User extends Authenticatable implements HasMedia
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable, InteractsWithMedia, SoftDeletes;
+    use HasApiTokens, HasFactory, Notifiable, InteractsWithMedia, SoftDeletes, CanInteractSocially;
 
     /**
      * The attributes that are mass assignable.
@@ -84,11 +86,11 @@ class User extends Authenticatable implements HasMedia
     }
 
     /**
-     * Get the store associated with the user.
+     * Get the stores associated with the user.
      */
-    public function store()
+    public function stores()
     {
-        return $this->hasOne(Store::class);
+        return $this->hasMany(Store::class);
     }
 
     /**
@@ -141,4 +143,10 @@ class User extends Authenticatable implements HasMedia
     {
         return $this->hasMany(Notification::class);
     }
+
+    // Relationships provided by CanInteractSocially:
+    // sentFriendRequests, receivedFriendRequests, blockedEntities, blockedByEntities, conversations
+
+    // Helper methods provided by CanInteractSocially:
+    // hasBlocked, isBlockedBy, isFriendsWith, friends
 }

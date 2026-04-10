@@ -9,9 +9,14 @@ class Favorite extends Pivot
 {
     use SoftDeletes;
 
-
+    /**
+     * @var string
+     */
     protected $table = 'favorites';
 
+    /**
+     * @var string[]
+     */
     protected $fillable = [
       'user_id',
       'listing_id'

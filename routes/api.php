@@ -16,6 +16,8 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\AppSettingController;
 use App\Http\Controllers\Api\SearchSuggestionController;
+use App\Http\Controllers\Api\FriendRequestController;
+use App\Http\Controllers\Api\ChatController;
 
 //guest routes
 Route::post('/register', [AuthController::class, 'register']);
@@ -87,4 +89,32 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/stores/{store}/follow', [StoreFollowController::class, 'follow']);
     Route::post('/stores/{store}/unfollow', [StoreFollowController::class, 'unfollow']);
     Route::post('/stores/{store}/rate', [StoreRatingController::class, 'rate']);
+
+
+    // Chat Module
+    Route::get('/chat/conversations', [ChatController::class, 'listConversations']);
+    Route::get('/chat/conversations/{id}/messages', [ChatController::class, 'getMessages']);
+    Route::post('/chat/messages/send', [ChatController::class, 'sendMessage']);
+    Route::get('/chat/unread-count', [ChatController::class, 'getUnreadCount']);
+
+    // Friends & Discovery
+    Route::get('/contacts', [ContactController::class, 'getContacts']);
+    Route::get('/contacts/discover', [ContactController::class, 'discoverUsers']);
+    Route::post('/contacts/{id}/block', [ContactController::class, 'blockUser']);
+    Route::post('/contacts/{id}/unblock', [ContactController::class, 'unblockUser']);
+    Route::get('/contacts/blocked', [ContactController::class, 'getBlockedUsers']);
+
+    // Friend Requests
+    //received list
+    Route::get('/friend-requests/received', [FriendRequestController::class, 'getReceivedRequests']);
+    //sent list
+    Route::get('/friend-requests/sent', [FriendRequestController::class, 'getSentRequests']);
+    //send
+    Route::post('/friend-requests/send', [FriendRequestController::class, 'sendRequest']);
+    //sdi notificaiton db store and fireabe notificaiton
+    //respond
+    Route::post('/friend-requests/{id}/respond', [FriendRequestController::class, 'respondToRequest']);
+    //sdi notificaiton db store and fireabe notificaiton
+    //cancel
+    Route::delete('/friend-requests/{id}/cancel', [FriendRequestController::class, 'cancelRequest']);
 });
