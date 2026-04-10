@@ -7,11 +7,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
+use App\Traits\CanInteractSocially;
 
 class Store extends Model implements HasMedia
 {
     /** @use HasFactory<\Database\Factories\StoreFactory> */
-    use HasFactory, InteractsWithMedia;
+    use HasFactory, InteractsWithMedia, CanInteractSocially;
 
     protected $fillable = [
         'user_id',
@@ -87,4 +88,7 @@ class Store extends Model implements HasMedia
     {
         return $this->ratings()->count();
     }
+
+    // Relationships provided by CanInteractSocially:
+    // sentFriendRequests, receivedFriendRequests, blockedEntities, blockedByEntities, conversations
 }
