@@ -3,9 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Events\FriendRequestUpdated;
+use App\Events\UserSocialRefresh;
 use App\Exceptions\ApiOperationFailedException;
 use App\Http\Controllers\Controller;
+use App\Models\FriendRequest;
+use App\Models\Store;
+use App\Models\User;
 use App\Repositories\FriendRequestRepository;
+use App\Services\SocketIoEmitter;
 use Illuminate\Http\Request;
 
 class FriendRequestController extends Controller
@@ -17,7 +22,6 @@ class FriendRequestController extends Controller
 
     /**
      * FriendRequestController constructor.
-     * @param  FriendRequestRepository  $friendRequestRepo
      */
     public function __construct(FriendRequestRepository $friendRequestRepo)
     {
@@ -25,10 +29,9 @@ class FriendRequestController extends Controller
     }
 
     /**
-     * @param  Request  $request
-     * @throws ApiOperationFailedException
-     *
      * @return \Illuminate\Http\JsonResponse
+     *
+     * @throws ApiOperationFailedException
      */
     public function getReceivedRequests(Request $request)
     {
@@ -38,7 +41,7 @@ class FriendRequestController extends Controller
         // If store is explicitly requested, verify ownership
         if ($type == 'store' && $id) {
             $store = \App\Models\Store::find($id);
-            if (!$store || $store->user_id != auth()->id()) {
+            if (! $store || $store->user_id != auth()->id()) {
                 return $this->actionFailure('Unauthorized store access', null, 403);
             }
         }
@@ -49,10 +52,9 @@ class FriendRequestController extends Controller
     }
 
     /**
-     * @param  Request  $request
-     * @throws ApiOperationFailedException
-     *
      * @return \Illuminate\Http\JsonResponse
+     *
+     * @throws ApiOperationFailedException
      */
     public function getSentRequests(Request $request)
     {
@@ -62,7 +64,7 @@ class FriendRequestController extends Controller
         // If store is explicitly requested, verify ownership
         if ($type == 'store' && $id) {
             $store = \App\Models\Store::find($id);
-            if (!$store || $store->user_id != auth()->id()) {
+            if (! $store || $store->user_id != auth()->id()) {
                 return $this->actionFailure('Unauthorized store access', null, 403);
             }
         }
@@ -73,8 +75,6 @@ class FriendRequestController extends Controller
     }
 
     /**
-     * @param  Request  $request
-     *
      * @return \Illuminate\Http\JsonResponse
      */
     public function sendRequest(Request $request)
@@ -99,7 +99,7 @@ class FriendRequestController extends Controller
         // If sender is store, verify ownership
         if ($senderType == 'store') {
             $store = \App\Models\Store::find($senderId);
-            if (!$store || $store->user_id != auth()->id()) {
+            if (! $store || $store->user_id != auth()->id()) {
                 return $this->actionFailure('Unauthorized store access', null, 403);
             }
         }
@@ -108,6 +108,8 @@ class FriendRequestController extends Controller
             $friendRequest = $this->friendRequestRepository->sendRequest($senderId, $receiverId, $senderType, $receiverType);
 
             broadcast(new FriendRequestUpdated($friendRequest))->toOthers();
+            SocketIoEmitter::emitFriendRequest($friendRequest);
+            $this->broadcastSocialRefreshForFriendRequest($friendRequest);
 
             return $this->actionSuccess('Friend request sent successfully', $friendRequest);
         } catch (ApiOperationFailedException $e) {
@@ -118,9 +120,6 @@ class FriendRequestController extends Controller
     }
 
     /**
-     * @param  Request  $request
-     * @param $id
-     *
      * @return \Illuminate\Http\JsonResponse
      */
     public function respondToRequest(Request $request, $id)
@@ -137,7 +136,7 @@ class FriendRequestController extends Controller
         // If receiver is store, verify ownership
         if ($receiverType == 'store') {
             $store = \App\Models\Store::find($receiverId);
-            if (!$store || $store->user_id != auth()->id()) {
+            if (! $store || $store->user_id != auth()->id()) {
                 return $this->actionFailure('Unauthorized store access', null, 403);
             }
         }
@@ -146,16 +145,16 @@ class FriendRequestController extends Controller
             $friendRequest = $this->friendRequestRepository->updateStatus($id, $receiverId, $request->status, $receiverType);
 
             broadcast(new FriendRequestUpdated($friendRequest))->toOthers();
+            SocketIoEmitter::emitFriendRequest($friendRequest);
+            $this->broadcastSocialRefreshForFriendRequest($friendRequest);
 
-            return $this->actionSuccess('Friend request ' . $request->status . ' successfully', $friendRequest);
+            return $this->actionSuccess('Friend request '.$request->status.' successfully', $friendRequest);
         } catch (\Exception $e) {
             return $this->serverError($e->getMessage());
         }
     }
 
     /**
-     * @param $id
-     *
      * @return \Illuminate\Http\JsonResponse
      */
     public function cancelRequest(Request $request, $id)
@@ -166,7 +165,7 @@ class FriendRequestController extends Controller
         // If sender is store, verify ownership
         if ($senderType == 'store') {
             $store = \App\Models\Store::find($senderId);
-            if (!$store || $store->user_id != auth()->id()) {
+            if (! $store || $store->user_id != auth()->id()) {
                 return $this->actionFailure('Unauthorized store access', null, 403);
             }
         }
@@ -178,5 +177,28 @@ class FriendRequestController extends Controller
         } catch (\Exception $e) {
             return $this->serverError($e->getMessage());
         }
+    }
+
+    /**
+     * Push lightweight inbox refresh so Contacts / Sent / Received lists update without full reload.
+     */
+    private function broadcastSocialRefreshForFriendRequest(FriendRequest $friendRequest): void
+    {
+        $friendRequest->loadMissing(['sender', 'receiver']);
+        $userIds = [];
+        foreach (['sender', 'receiver'] as $role) {
+            $m = $friendRequest->{$role};
+            if ($m instanceof User) {
+                $userIds[] = (int) $m->id;
+            } elseif ($m instanceof Store) {
+                $userIds[] = (int) $m->user_id;
+            }
+        }
+        $userIds = array_values(array_unique(array_filter($userIds)));
+        if ($userIds === []) {
+            return;
+        }
+        broadcast(new UserSocialRefresh($userIds, 'friend_request'));
+        SocketIoEmitter::emitToUserIds($userIds, 'user.social.refresh', ['reason' => 'friend_request']);
     }
 }

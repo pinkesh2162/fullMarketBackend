@@ -12,9 +12,6 @@ use Illuminate\Support\Facades\DB;
 
 class StoreRepository extends BaseRepository
 {
-    /**
-     * @param  Application  $app
-     */
     public function __construct(Application $app)
     {
         parent::__construct($app);
@@ -38,13 +35,13 @@ class StoreRepository extends BaseRepository
     {
         return Store::class;
     }
+
     /**
      * Update or Create a store for the given user.
      *
-     * @param  int  $userId
      * @param  array  $data
+     *
      * @throws ApiOperationFailedException
-     * @return Store
      */
     public function updateStore(int $userId, $request): Store
     {
@@ -60,29 +57,28 @@ class StoreRepository extends BaseRepository
                 'contact_information' => $data['contact_information'] ?? null,
                 'social_media' => $data['social_media'] ?? null,
             ];
-            if(!empty($store)){
+            if (! empty($store)) {
                 $store = Store::updateOrCreate(
-                ['user_id' => $userId],
-                $data
-            );
-            }else{
+                    ['user_id' => $userId],
+                    $data
+                );
+            } else {
                 $data['user_id'] = $userId;
 
                 $store = Store::create($data);
 
-                 $user = Auth::user();
+                $user = Auth::user();
                 // Assign existing listings to the newly created/updated store
                 Listing::where('user_id', $userId)
                     ->whereNull('store_id')
                     ->update(['store_id' => $store->id]);
 
                 if ($user && $user->fcm_token) {
-                    $title = "Store Created";
+                    $title = 'Store Created';
                     $body = "Your store '{$store->name}' has been created successfully.";
                     dispatch_sync(new SendFcmNotificationJob($user->fcm_token, $title, $body, ['store_id' => $store->id], $user->id));
                 }
             }
-
 
             // Handle cover_photo upload
             if (isset($request->cover_photo) && $request->cover_photo instanceof \Illuminate\Http\UploadedFile) {
@@ -91,12 +87,11 @@ class StoreRepository extends BaseRepository
                     config('app.media_disc', 'public'));
             }
 
-             if (isset($request->logo) && $request->logo instanceof \Illuminate\Http\UploadedFile) {
+            if (isset($request->logo) && $request->logo instanceof \Illuminate\Http\UploadedFile) {
                 $store->clearMediaCollection(Store::PROFILE_PHOTO);
                 $store->addMedia($request->logo)->toMediaCollection(Store::PROFILE_PHOTO,
                     config('app.media_disc', 'public'));
             }
-
 
             DB::commit();
 
@@ -110,8 +105,6 @@ class StoreRepository extends BaseRepository
     /**
      * Delete the store for the given user.
      *
-     * @param int $userId
-     * @return bool
      * @throws ApiOperationFailedException
      */
     public function deleteStore(int $userId): bool
@@ -119,7 +112,7 @@ class StoreRepository extends BaseRepository
         try {
             $store = $this->allQuery(['user_id' => $userId])->first();
 
-            if (!$store) {
+            if (! $store) {
                 throw new ApiOperationFailedException('store_not_found', 404);
             }
 
@@ -129,8 +122,8 @@ class StoreRepository extends BaseRepository
 
             // Spatie Media Library handles deleting attached media automatically
             // if configured (or we can just let CASCADE delete take care of it or manual clean up)
-            $store->clearMediaCollection('cover_photo');
-            $store->clearMediaCollection('logo');
+            $store->clearMediaCollection(Store::COVER_PHOTO);
+            $store->clearMediaCollection(Store::PROFILE_PHOTO);
 
             return $store->delete();
         } catch (\Exception $e) {

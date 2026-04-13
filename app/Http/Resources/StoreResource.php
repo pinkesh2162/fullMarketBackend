@@ -28,6 +28,10 @@ class StoreResource extends JsonResource
             'is_followed' => auth('sanctum')->check() ? $this->followers()->where('user_id', auth('sanctum')->id())->exists() : false,
             'average_rating' => (float) $this->average_rating,
             'ratings_count' => $this->ratings_count,
+            /** Authenticated viewer's existing rating for this store (1–5), if any */
+            'my_rating' => auth('sanctum')->check()
+                ? $this->ratings()->where('user_id', auth('sanctum')->id())->value('rating')
+                : null,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

@@ -1,25 +1,24 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\AppSettingController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\ChatController;
+use App\Http\Controllers\Api\ClaimController;
+use App\Http\Controllers\Api\ContactController;
+use App\Http\Controllers\Api\FavoriteController;
+use App\Http\Controllers\Api\FriendRequestController;
+use App\Http\Controllers\Api\ListingController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\SearchSuggestionController;
 use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\Api\StoreController;
-use App\Http\Controllers\Api\CategoryController;
-use App\Http\Controllers\Api\ListingController;
-use App\Http\Controllers\Api\FavoriteController;
-use App\Http\Controllers\Api\ClaimController;
 use App\Http\Controllers\Api\StoreFollowController;
 use App\Http\Controllers\Api\StoreRatingController;
-use App\Http\Controllers\Api\NotificationController;
+use Illuminate\Support\Facades\Route;
 
-use App\Http\Controllers\Api\ContactController;
-use App\Http\Controllers\Api\AppSettingController;
-use App\Http\Controllers\Api\SearchSuggestionController;
-use App\Http\Controllers\Api\FriendRequestController;
-use App\Http\Controllers\Api\ChatController;
-
-//guest routes
+// guest routes
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/verify-email', [AuthController::class, 'verifyEmail']);
 Route::post('/resend-otp', [AuthController::class, 'resendOtp']);
@@ -90,12 +89,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/stores/{store}/unfollow', [StoreFollowController::class, 'unfollow']);
     Route::post('/stores/{store}/rate', [StoreRatingController::class, 'rate']);
 
-
     // Chat Module
     Route::get('/chat/conversations', [ChatController::class, 'listConversations']);
     Route::get('/chat/conversations/{id}/messages', [ChatController::class, 'getMessages']);
     Route::post('/chat/messages/send', [ChatController::class, 'sendMessage']);
     Route::get('/chat/unread-count', [ChatController::class, 'getUnreadCount']);
+    Route::get('/chat/tab-count', [ChatController::class, 'getChatTabCounts']);
 
     // Friends & Discovery
     Route::get('/contacts', [ContactController::class, 'getContacts']);
@@ -105,16 +104,16 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/contacts/blocked', [ContactController::class, 'getBlockedUsers']);
 
     // Friend Requests
-    //received list
+    // received list
     Route::get('/friend-requests/received', [FriendRequestController::class, 'getReceivedRequests']);
-    //sent list
+    // sent list
     Route::get('/friend-requests/sent', [FriendRequestController::class, 'getSentRequests']);
-    //send
+    // send
     Route::post('/friend-requests/send', [FriendRequestController::class, 'sendRequest']);
-    //sdi notificaiton db store and fireabe notificaiton
-    //respond
+    // sdi notificaiton db store and fireabe notificaiton
+    // respond
     Route::post('/friend-requests/{id}/respond', [FriendRequestController::class, 'respondToRequest']);
-    //sdi notificaiton db store and fireabe notificaiton
-    //cancel
+    // sdi notificaiton db store and fireabe notificaiton
+    // cancel
     Route::delete('/friend-requests/{id}/cancel', [FriendRequestController::class, 'cancelRequest']);
 });

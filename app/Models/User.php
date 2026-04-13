@@ -3,21 +3,19 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Traits\CanInteractSocially;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 
-use App\Traits\CanInteractSocially;
-
 class User extends Authenticatable implements HasMedia
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable, InteractsWithMedia, SoftDeletes, CanInteractSocially;
+    use CanInteractSocially, HasApiTokens, HasFactory, InteractsWithMedia, Notifiable, SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
@@ -39,7 +37,8 @@ class User extends Authenticatable implements HasMedia
         'otp',
         'otp_expires_at',
         'email_verified_at',
-        'fcm_token'
+        'fcm_token',
+        'data',
     ];
 
     const PROFILE = 'user';
@@ -55,6 +54,13 @@ class User extends Authenticatable implements HasMedia
     ];
 
     /**
+     * Include accessor URLs in API JSON (e.g. /contacts, profiles).
+     *
+     * @var list<string>
+     */
+    protected $appends = ['profile_photo'];
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -63,8 +69,8 @@ class User extends Authenticatable implements HasMedia
     {
         return [
             'email_verified_at' => 'datetime',
-            'password'          => 'hashed',
-            'location'          => 'array'
+            'password' => 'hashed',
+            'location' => 'array',
         ];
     }
 
@@ -80,9 +86,17 @@ class User extends Authenticatable implements HasMedia
             return $media->getFullUrl();
         }
 
-        $fullName = trim(($this->first_name ?? '') . ' ' . ($this->last_name ?? ''));
+        $fullName = trim(($this->first_name ?? '').' '.($this->last_name ?? ''));
 
         return getUserImageInitial($this->id, $fullName);
+    }
+
+    /**
+     * Get the stores associated with the user.
+     */
+    public function store()
+    {
+        return $this->hasOne(Store::class);
     }
 
     /**
@@ -99,10 +113,10 @@ class User extends Authenticatable implements HasMedia
     public function favoriteListings()
     {
         return $this->belongsToMany(Listing::class, 'favorites', 'user_id', 'listing_id')
-                    ->using(Favorite::class)
-                    ->withPivot('deleted_at')
-                    ->wherePivotNull('deleted_at')
-                    ->withTimestamps();
+            ->using(Favorite::class)
+            ->withPivot('deleted_at')
+            ->wherePivotNull('deleted_at')
+            ->withTimestamps();
     }
 
     /**
@@ -120,6 +134,7 @@ class User extends Authenticatable implements HasMedia
     {
         return $this->hasMany(Claim::class);
     }
+
     /**
      * Get the stores followed by the user.
      */

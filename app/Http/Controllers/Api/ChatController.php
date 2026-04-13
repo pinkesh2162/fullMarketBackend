@@ -3,8 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Events\MessageSent;
+use App\Events\UserSocialRefresh;
 use App\Http\Controllers\Controller;
+use App\Models\Conversation;
+use App\Models\Store;
 use App\Repositories\ChatRepository;
+use App\Repositories\ContactRepository;
+use App\Repositories\FriendRequestRepository;
+use App\Services\SocketIoEmitter;
 use Illuminate\Http\Request;
 
 class ChatController extends Controller
@@ -14,21 +20,27 @@ class ChatController extends Controller
      */
     protected $chatRepository;
 
+    protected ContactRepository $contactRepository;
+
+    protected FriendRequestRepository $friendRequestRepository;
+
     /**
      * ChatController constructor.
-     * @param  ChatRepository  $chatRepo
      */
-    public function __construct(ChatRepository $chatRepo)
-    {
+    public function __construct(
+        ChatRepository $chatRepo,
+        ContactRepository $contactRepository,
+        FriendRequestRepository $friendRequestRepository
+    ) {
         $this->chatRepository = $chatRepo;
+        $this->contactRepository = $contactRepository;
+        $this->friendRequestRepository = $friendRequestRepository;
     }
 
     /**
-     * @param  Request  $request
+     * @return \Illuminate\Http\JsonResponse
      *
      * @throws \App\Exceptions\ApiOperationFailedException
-     *
-     * @return \Illuminate\Http\JsonResponse
      */
     public function listConversations(Request $request)
     {
@@ -38,12 +50,9 @@ class ChatController extends Controller
     }
 
     /**
-     * @param  Request  $request
-     * @param $id
+     * @return \Illuminate\Http\JsonResponse
      *
      * @throws \App\Exceptions\ApiOperationFailedException
-     *
-     * @return \Illuminate\Http\JsonResponse
      */
     public function getMessages(Request $request, $id)
     {
@@ -53,9 +62,6 @@ class ChatController extends Controller
     }
 
     /**
-     * @param  Request  $request
-     *
-     *
      * @return \Illuminate\Http\JsonResponse
      */
     public function sendMessage(Request $request)
@@ -82,7 +88,32 @@ class ChatController extends Controller
             $messages = $this->chatRepository->sendMessage($request->all());
 
             foreach ($messages as $message) {
-                broadcast(new MessageSent($message->load('sender')))->toOthers();
+                $loaded = $message->load('sender');
+                broadcast(new MessageSent($loaded))->toOthers();
+                SocketIoEmitter::emit($loaded);
+            }
+
+            $first = $messages->first();
+            if ($first) {
+                $conversation = Conversation::with(['participants'])->find($first->conversation_id);
+                if ($conversation) {
+                    $userIds = [];
+                    foreach ($conversation->participants as $p) {
+                        if ($p->participant_type === 'user') {
+                            $userIds[] = (int) $p->participant_id;
+                        } elseif ($p->participant_type === 'store') {
+                            $store = Store::find($p->participant_id);
+                            if ($store) {
+                                $userIds[] = (int) $store->user_id;
+                            }
+                        }
+                    }
+                    $userIds = array_values(array_unique(array_filter($userIds)));
+                    if ($userIds !== []) {
+                        broadcast(new UserSocialRefresh($userIds, 'message'));
+                        SocketIoEmitter::emitToUserIds($userIds, 'user.social.refresh', ['reason' => 'message']);
+                    }
+                }
             }
 
             return $this->actionSuccess('Messages sent successfully', $messages);
@@ -92,14 +123,38 @@ class ChatController extends Controller
     }
 
     /**
+     * @return \Illuminate\Http\JsonResponse
      *
      * @throws \App\Exceptions\ApiOperationFailedException
-     *
-     * @return \Illuminate\Http\JsonResponse
      */
     public function getUnreadCount()
     {
         $count = $this->chatRepository->getUnreadCount();
+
         return $this->actionSuccess('Unread count retrieved successfully', ['unread_count' => $count]);
+    }
+
+    /**
+     * Single payload for chat tab badges: unread messages, contacts, pending friend requests.
+     *
+     * @return \Illuminate\Http\JsonResponse
+     *
+     * @throws \App\Exceptions\ApiOperationFailedException
+     */
+    public function getChatTabCounts()
+    {
+        $user = auth()->user();
+        $unread = $this->chatRepository->getUnreadCount();
+        $contacts = $this->contactRepository->countContacts($user);
+        $received = $this->friendRequestRepository->countPendingReceived();
+        $sent = $this->friendRequestRepository->countPendingSent();
+
+        return $this->actionSuccess('Chat tab counts retrieved successfully', [
+            'unread_messages' => $unread,
+            'contacts' => $contacts,
+            'friend_requests_received' => $received,
+            'friend_requests_sent' => $sent,
+            'all_counts' => (int) $unread + (int) $contacts + (int) $received + (int) $sent,
+        ]);
     }
 }

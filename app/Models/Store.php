@@ -2,17 +2,17 @@
 
 namespace App\Models;
 
+use App\Traits\CanInteractSocially;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
-use App\Traits\CanInteractSocially;
 
 class Store extends Model implements HasMedia
 {
     /** @use HasFactory<\Database\Factories\StoreFactory> */
-    use HasFactory, InteractsWithMedia, CanInteractSocially;
+    use CanInteractSocially, HasFactory, InteractsWithMedia;
 
     protected $fillable = [
         'user_id',
@@ -30,7 +30,15 @@ class Store extends Model implements HasMedia
         'social_media' => 'array',
     ];
 
+    /**
+     * Include profile image URL in API JSON (e.g. /contacts).
+     *
+     * @var list<string>
+     */
+    protected $appends = ['profile_photo'];
+
     const COVER_PHOTO = 'cover_photo';
+
     const PROFILE_PHOTO = 'profile_photo';
 
     /**

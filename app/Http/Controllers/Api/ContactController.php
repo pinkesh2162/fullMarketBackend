@@ -4,11 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Mail\ContactMail;
+use App\Models\Contact;
 use App\Repositories\ContactRepository;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Mail;
-use App\Models\Contact;
 
 class ContactController extends Controller
 {
@@ -19,7 +20,6 @@ class ContactController extends Controller
 
     /**
      * ContactController constructor.
-     * @param  ContactRepository  $contactRepo
      */
     public function __construct(ContactRepository $contactRepo)
     {
@@ -29,7 +29,6 @@ class ContactController extends Controller
     /**
      * Send a contact email.
      *
-     * @param  Request  $request
      * @return JsonResponse
      */
     public function send(Request $request)
@@ -46,7 +45,7 @@ class ContactController extends Controller
             Contact::create($data);
 
             // Send email to the support address
-            Mail::to(config('app.admin_email'))->queue(new ContactMail($data));
+            Mail::to(config('app.admin_email'))->send(new ContactMail($data));
 
             return $this->actionSuccess('request_submitted');
         } catch (\Exception $e) {
@@ -55,10 +54,9 @@ class ContactController extends Controller
     }
 
     /**
+     * @return \Illuminate\Http\JsonResponse
      *
      * @throws \App\Exceptions\ApiOperationFailedException
-     *
-     * @return \Illuminate\Http\JsonResponse
      */
     public function getContacts()
     {
@@ -68,27 +66,56 @@ class ContactController extends Controller
     }
 
     /**
-     * @param  Request  $request
+     * @return \Illuminate\Http\JsonResponse
      *
      * @throws \App\Exceptions\ApiOperationFailedException
-     *
-     * @return \Illuminate\Http\JsonResponse
      */
     public function discoverUsers(Request $request)
     {
-        $type = $request->query('type');
-        $typeClass = $type ? (\Illuminate\Database\Eloquent\Relations\Relation::getMorphedModel($type) ?? \App\Models\User::class) : null;
+        $request->validate([
+            'query' => 'nullable|string|max:255',
+            'page' => 'nullable|integer|min:1',
+            'per_page' => 'nullable|integer|min:1|max:200',
+        ]);
 
-        $users = $this->contactRepository->discoverUsers($request->query('query'), $typeClass);
+        $perPageRaw = $request->query('per_page');
+        $perPage = ($perPageRaw === null || $perPageRaw === '') ? null : (int) $perPageRaw;
+        $page = (int) $request->query('page', 1);
 
-        return $this->actionSuccess('Entities discovered successfully', $users);
+        $result = $this->contactRepository->discoverUsers(
+            $request->query('query'),
+            $perPage,
+            $page
+        );
+
+        if ($result instanceof LengthAwarePaginator) {
+            return $this->actionSuccess(
+                'Users discovered successfully',
+                $result->items(),
+                self::HTTP_OK,
+                [
+                    'current_page' => $result->currentPage(),
+                    'per_page' => $result->perPage(),
+                    'total' => $result->total(),
+                    'last_page' => $result->lastPage(),
+                ]
+            );
+        }
+
+        return $this->actionSuccess(
+            'Users discovered successfully',
+            $result->values()->all(),
+            self::HTTP_OK,
+            [
+                'current_page' => 1,
+                'per_page' => null,
+                'total' => $result->count(),
+                'last_page' => 1,
+            ]
+        );
     }
 
     /**
-     * @param  Request  $request
-     * @param $id
-     *
-     *
      * @return \Illuminate\Http\JsonResponse
      */
     public function blockUser(Request $request, $id)
@@ -112,7 +139,7 @@ class ContactController extends Controller
             }
 
             $blocker = $blockerClass::find($blockerId);
-            if (!$blocker) {
+            if (! $blocker) {
                 return $this->actionFailure('Blocker entity not found', null, 404);
             }
 
@@ -133,9 +160,6 @@ class ContactController extends Controller
     }
 
     /**
-     * @param $id
-     *
-     *
      * @return \Illuminate\Http\JsonResponse
      */
     public function unblockUser(Request $request, $id)
@@ -155,7 +179,7 @@ class ContactController extends Controller
             $blockerClass = \Illuminate\Database\Eloquent\Relations\Relation::getMorphedModel($blockerType);
 
             $blocker = $blockerClass::find($blockerId);
-            if (!$blocker) {
+            if (! $blocker) {
                 return $this->actionFailure('Blocker entity not found', null, 404);
             }
 
@@ -176,8 +200,6 @@ class ContactController extends Controller
     }
 
     /**
-     *
-     *
      * @return \Illuminate\Http\JsonResponse
      */
     public function getBlockedUsers(Request $request)
@@ -187,7 +209,7 @@ class ContactController extends Controller
         $blockerClass = \Illuminate\Database\Eloquent\Relations\Relation::getMorphedModel($blockerType);
 
         $blocker = $blockerClass::find($blockerId);
-        if (!$blocker) {
+        if (! $blocker) {
             return $this->actionFailure('Blocker entity not found', null, 404);
         }
 

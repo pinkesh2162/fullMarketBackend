@@ -6,15 +6,15 @@ use App\Exceptions\ApiOperationFailedException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UserRegisterRequest;
 use App\Http\Resources\UserResource;
+use App\Mail\ForgotPasswordMail;
+use App\Models\User;
 use App\Repositories\UserRepository;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
-use App\Mail\ForgotPasswordMail;
-use App\Models\User;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
 class AuthController extends Controller
@@ -26,7 +26,6 @@ class AuthController extends Controller
 
     /**
      * AuthController constructor.
-     * @param  UserRepository  $userRepository
      */
     public function __construct(UserRepository $userRepository)
     {
@@ -34,7 +33,6 @@ class AuthController extends Controller
     }
 
     /**
-     * @param  Request  $request
      * @return JsonResponse
      */
     public function login(Request $request)
@@ -50,13 +48,13 @@ class AuthController extends Controller
         //         ->first();
         // });
         $user = User::with('media')
-                ->where('email', $request->email)
-                ->first();
-        if (!$user || !Hash::check($request->password, $user->password)) {
+            ->where('email', $request->email)
+            ->first();
+        if (! $user || ! Hash::check($request->password, $user->password)) {
             return $this->actionFailure('invalid_credentials', null, self::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        if (!$user->email_verified_at) {
+        if (! $user->email_verified_at) {
             return $this->actionFailure('otp_not_verified', null, 403);
         }
 
@@ -73,10 +71,9 @@ class AuthController extends Controller
     }
 
     /**
-     * @param  UserRegisterRequest  $request
+     * @return JsonResponse
      *
      * @throws ApiOperationFailedException
-     * @return JsonResponse
      */
     public function register(UserRegisterRequest $request)
     {
@@ -88,9 +85,9 @@ class AuthController extends Controller
     }
 
     /**
-     * @param  Request  $request
-     * @throws ApiOperationFailedException
      * @return JsonResponse
+     *
+     * @throws ApiOperationFailedException
      */
     public function verifyEmail(Request $request)
     {
@@ -105,9 +102,9 @@ class AuthController extends Controller
     }
 
     /**
-     * @param  Request  $request
-     * @throws ApiOperationFailedException
      * @return JsonResponse
+     *
+     * @throws ApiOperationFailedException
      */
     public function resendOtp(Request $request)
     {
@@ -119,7 +116,6 @@ class AuthController extends Controller
     }
 
     /**
-     * @param  Request  $request
      * @return JsonResponse
      */
     public function logout(Request $request)
@@ -130,7 +126,6 @@ class AuthController extends Controller
     }
 
     /**
-     * @param Request $request
      * @return JsonResponse
      */
     public function forgotPassword(Request $request)
@@ -138,7 +133,7 @@ class AuthController extends Controller
         $request->validate(['email' => 'required|email']);
 
         $user = $this->userRepo->findByEmail($request->email);
-        if (!$user) {
+        if (! $user) {
             return $this->notFound('email_not_found');
         }
 
@@ -149,7 +144,7 @@ class AuthController extends Controller
             ['token' => Hash::make($token), 'created_at' => now()]
         );
 
-        $resetLink = env('FRONTEND_URL', 'http://localhost:3000') . '/reset-password?token=' . $token . '&email=' . $user->email;
+        $resetLink = env('FRONTEND_URL', 'http://localhost:5173').'/reset-password?token='.$token.'&email='.$user->email.'&mode=resetPassword';
 
         Mail::to($user->email)->send(new ForgotPasswordMail($user->email, $resetLink));
 
@@ -157,9 +152,9 @@ class AuthController extends Controller
     }
 
     /**
-     * @param  Request  $request
-     * @throws ApiOperationFailedException
      * @return JsonResponse
+     *
+     * @throws ApiOperationFailedException
      */
     public function resetPassword(Request $request)
     {
@@ -175,19 +170,18 @@ class AuthController extends Controller
     }
 
     /**
-     * @param Request $request
      * @return JsonResponse
      */
     public function changePassword(Request $request)
     {
         $request->validate([
             'current_password' => 'required|string',
-            'password'         => 'required|string|min:8|confirmed',
+            'password' => 'required|string|min:8|confirmed',
         ]);
 
         $user = $request->user();
 
-        if (!Hash::check($request->current_password, $user->password)) {
+        if (! Hash::check($request->current_password, $user->password)) {
             return $this->actionFailure('current_password_invalid', null, self::HTTP_BAD_REQUEST);
         }
 

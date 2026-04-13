@@ -31,4 +31,13 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    /*
+    | Node Socket.IO relay — see full-market-api/socketio-server/
+    | POST {emit_url}/internal/emit with X-Internal-Secret
+    */
+    'socket_io' => [
+        'emit_url' => env('SOCKET_IO_EMIT_URL'),
+        'emit_secret' => env('SOCKET_IO_EMIT_SECRET'),
+    ],
+
 ];

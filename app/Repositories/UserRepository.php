@@ -27,7 +27,6 @@ use Illuminate\Support\Str;
 class UserRepository extends BaseRepository
 {
     /**
-     * @param  Application  $app
      * @throws Exception
      */
     public function __construct(Application $app)
@@ -57,10 +56,9 @@ class UserRepository extends BaseRepository
     }
 
     /**
-     * @param $request
+     * @return array|JsonResponse
      *
      * @throws ApiOperationFailedException
-     * @return array|JsonResponse
      */
     public function registerUser($request)
     {
@@ -75,13 +73,12 @@ class UserRepository extends BaseRepository
                 $data = $request->except('password');
                 $data['password'] = Hash::make($request->password);
 
-                if (!empty($data['name'])) {
+                if (! empty($data['name'])) {
                     [$first, $last] = array_pad(explode(' ', trim($data['name']), 2), 2, null);
                     $data['first_name'] = $first;
                     $data['last_name'] = $last;
                     unset($data['name']);
                 }
-
 
                 $otp = random_int(100000, 999999);
                 $data['otp'] = $otp;
@@ -93,7 +90,7 @@ class UserRepository extends BaseRepository
                 Mail::to($user->email)->send(new VerifyEmailMail($user->email, $otp));
 
                 // Temporarily store password in cache for WelcomeMail (30 mins)
-                Cache::put('user_pass_' . $user->email, $request->password, now()->addMinutes(30));
+                Cache::put('user_pass_'.$user->email, $request->password, now()->addMinutes(30));
 
                 return [
                     'user' => $user,
@@ -108,7 +105,6 @@ class UserRepository extends BaseRepository
     /**
      * Find user by email.
      *
-     * @param  string  $email
      * @return User|Builder|Model|object|null
      */
     public function findByEmail(string $email)
@@ -119,8 +115,6 @@ class UserRepository extends BaseRepository
     /**
      * Update user profile.
      *
-     * @param User $user
-     * @param array $data
      * @return User
      */
     public function updateProfile(User $user, array $data)
@@ -146,8 +140,6 @@ class UserRepository extends BaseRepository
     }
 
     /**
-     * @param  string  $provider
-     * @param  array  $appSocialUser
      * @return Builder|Model|object
      */
     public function handleAppSocialLogin(string $provider, array $appSocialUser)
@@ -156,10 +148,11 @@ class UserRepository extends BaseRepository
         $providerId = $userInfo['sub'] ?? null;
         $email = $userInfo['email'] ?? null;
 
-        $user = $this->allQuery(['provider' => $provider, 'provider_id' => $providerId])
+        $user = User::where('provider', $provider)
+            ->where('provider_id', $providerId)
             ->with('media')->first();
 
-        if (!$user && $email) {
+        if (! $user && $email) {
             $user = $this->allQuery(['email' => $email])->with('media')->first();
             if ($user) {
                 // Link account
@@ -170,7 +163,7 @@ class UserRepository extends BaseRepository
             }
         }
 
-        if (!$user) {
+        if (! $user) {
             $firstName = $userInfo['givenName'] ?? null;
             $lastName = null;
 
@@ -182,7 +175,7 @@ class UserRepository extends BaseRepository
                 $name = $nickname ?: Str::before($name, '@');
             }
 
-            if (!$firstName) {
+            if (! $firstName) {
                 if ($name) {
                     $parts = explode(' ', trim($name), 2);
                     $firstName = $parts[0];
@@ -190,9 +183,11 @@ class UserRepository extends BaseRepository
                 } else {
                     $firstName = $nickname ?: 'User';
                 }
-            } else if ($name && $firstName) {
+            } elseif ($name && $firstName) {
                 $lastName = trim(str_replace($firstName, '', $name));
-                if (empty($lastName)) $lastName = null;
+                if (empty($lastName)) {
+                    $lastName = null;
+                }
             }
 
             $user = $this->create([
@@ -207,14 +202,14 @@ class UserRepository extends BaseRepository
         }
 
         // Handle profile picture from URL if provided and user doesn't have one or it changed
-        if (isset($userInfo['picture']) && !empty($userInfo['picture'])) {
+        if (isset($userInfo['picture']) && ! empty($userInfo['picture'])) {
             // We can optionally check if media collection is empty or if we want to update it
             if ($user->getMedia(User::PROFILE)->isEmpty()) {
                 try {
                     $user->addMediaFromUrl($userInfo['picture'])->toMediaCollection(User::PROFILE, config('app.media_disc', 'public'));
                 } catch (Exception $e) {
                     // Log error or ignore if image download fails
-                    \Illuminate\Support\Facades\Log::error("Failed to download social profile picture: " . $e->getMessage());
+                    \Illuminate\Support\Facades\Log::error('Failed to download social profile picture: '.$e->getMessage());
                 }
             }
         }
@@ -223,10 +218,9 @@ class UserRepository extends BaseRepository
     }
 
     /**
-     * @param $request
+     * @return JsonResponse
      *
      * @throws ApiOperationFailedException
-     * @return JsonResponse
      */
     public function handleResetPassword($request): void
     {
@@ -235,7 +229,7 @@ class UserRepository extends BaseRepository
             ->where('email', $request->email)
             ->first();
 
-        if (!$reset || !Hash::check($request->token, $reset->token)) {
+        if (! $reset || ! Hash::check($request->token, $reset->token)) {
             throw new ApiOperationFailedException('invalid_reset_token', 400);
         }
 
@@ -245,7 +239,7 @@ class UserRepository extends BaseRepository
         }
 
         $user = $this->findByEmail($request->email);
-        if (!$user) {
+        if (! $user) {
             throw new ApiOperationFailedException('user_not_found', 404);
         }
 
@@ -255,18 +249,15 @@ class UserRepository extends BaseRepository
     }
 
     /**
-     * @param $email
-     * @param $otp
+     * @return array
      *
      * @throws ApiOperationFailedException
-     *
-     * @return array
      */
     public function verifyOtp($email, $otp)
     {
         $user = User::with('media')->where('email', $email)->first();
 
-        if (!$user) {
+        if (! $user) {
             throw new ApiOperationFailedException('user_not_found', 404);
         }
 
@@ -289,7 +280,7 @@ class UserRepository extends BaseRepository
         ]);
 
         // Retrieve temporary password if available
-        $password = Cache::pull('user_pass_' . $user->email);
+        $password = Cache::pull('user_pass_'.$user->email);
 
         // Send Welcome Mail after verification
         Mail::to($user->email)->send(new WelcomeMail($user, $password));
@@ -300,17 +291,15 @@ class UserRepository extends BaseRepository
     }
 
     /**
-     * @param $email
+     * @return bool
      *
      * @throws ApiOperationFailedException
-     *
-     * @return bool
      */
     public function resendOtp($email)
     {
         $user = $this->findByEmail($email);
 
-        if (!$user) {
+        if (! $user) {
             throw new ApiOperationFailedException('user_not_found', 404);
         }
 
@@ -330,10 +319,7 @@ class UserRepository extends BaseRepository
     }
 
     /**
-     * @param  User  $user
-     *
      * @throws ApiOperationFailedException
-     * @return bool
      */
     public function deleteUserAccount(User $user): bool
     {
@@ -369,8 +355,6 @@ class UserRepository extends BaseRepository
     /**
      * Permanently delete user account and all associated data.
      *
-     * @param User $user
-     * @return bool
      * @throws ApiOperationFailedException
      */
     public function forceDeleteUserAccount(User $user): bool

@@ -4,11 +4,8 @@ namespace App\Events;
 
 use App\Models\Message;
 use App\Models\User;
-use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
@@ -24,17 +21,23 @@ class MessageSent implements ShouldBroadcastNow
         $this->message = $message->load('sender');
     }
 
+    /** Stable event name for web/mobile Pusher clients. */
+    public function broadcastAs(): string
+    {
+        return 'message.sent';
+    }
+
     public function broadcastOn(): array
     {
         return [
-            new PrivateChannel('chat.' . $this->message->conversation_id),
+            new PrivateChannel('chat.'.$this->message->conversation_id),
         ];
     }
 
     public function broadcastWith(): array
     {
         $sender = $this->message->sender;
-        $senderName = $sender instanceof User ? ($sender->first_name . ' ' . $sender->last_name) : $sender->name;
+        $senderName = $sender instanceof User ? ($sender->first_name.' '.$sender->last_name) : $sender->name;
 
         return [
             'message' => [
