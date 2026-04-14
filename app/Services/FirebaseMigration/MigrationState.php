@@ -1,15 +1,29 @@
 <?php
 
-namespace App\Services\FirebaseImport;
+namespace App\Services\FirebaseMigration;
 
-class ImportState
+/**
+ * Persists Firestore id → local id maps for idempotent re-runs.
+ *
+ * @phpstan-type TState array{
+ *   users?: array<string, int>,
+ *   categories?: array<string, int>,
+ *   listings?: array<string, int>,
+ *   stores_by_owner_uid?: array<string, int>,
+ *   stores_by_doc_id?: array<string, int>,
+ *   category_dedup?: array<string, int>
+ * }
+ */
+class MigrationState
 {
-    /** @var array<string, array<string, int>> */
+    /** @var TState */
     protected array $data = [
         'users' => [],
         'categories' => [],
         'listings' => [],
-        'stores' => [],
+        'stores_by_owner_uid' => [],
+        'stores_by_doc_id' => [],
+        'category_dedup' => [],
     ];
 
     public function __construct(
@@ -29,7 +43,7 @@ class ImportState
             return;
         }
 
-        foreach (['users', 'categories', 'listings', 'stores'] as $key) {
+        foreach (array_keys($this->data) as $key) {
             if (isset($raw[$key]) && is_array($raw[$key])) {
                 $this->data[$key] = array_map('intval', $raw[$key]);
             }
@@ -69,6 +83,11 @@ class ImportState
         $this->data['categories'][$firebaseDocId] = $id;
     }
 
+    public function forgetCategory(string $firebaseDocId): void
+    {
+        unset($this->data['categories'][$firebaseDocId]);
+    }
+
     public function getListingId(string $firebaseDocId): ?int
     {
         return $this->data['listings'][$firebaseDocId] ?? null;
@@ -84,39 +103,41 @@ class ImportState
         unset($this->data['listings'][$firebaseDocId]);
     }
 
-    public function getStoreId(string $firebaseUserUid): ?int
+    public function getStoreIdByOwnerUid(string $firebaseUid): ?int
     {
-        return $this->data['stores'][$firebaseUserUid] ?? null;
+        return $this->data['stores_by_owner_uid'][$firebaseUid] ?? null;
     }
 
-    public function setStoreId(string $firebaseUserUid, int $id): void
+    public function setStoreIdByOwnerUid(string $firebaseUid, int $id): void
     {
-        $this->data['stores'][$firebaseUserUid] = $id;
+        $this->data['stores_by_owner_uid'][$firebaseUid] = $id;
     }
 
-    public function forgetUser(string $firebaseUid): void
+    public function getStoreIdByDocId(string $firebaseStoreDocId): ?int
     {
-        unset($this->data['users'][$firebaseUid]);
+        return $this->data['stores_by_doc_id'][$firebaseStoreDocId] ?? null;
     }
 
-    public function forgetCategory(string $firebaseDocId): void
+    public function setStoreIdByDocId(string $firebaseStoreDocId, int $id): void
     {
-        unset($this->data['categories'][$firebaseDocId]);
+        $this->data['stores_by_doc_id'][$firebaseStoreDocId] = $id;
     }
 
-    public function forgetStore(string $firebaseUserUid): void
+    public function getCategoryDedupLocalId(string $dedupKey): ?int
     {
-        unset($this->data['stores'][$firebaseUserUid]);
+        return $this->data['category_dedup'][$dedupKey] ?? null;
+    }
+
+    public function setCategoryDedup(string $dedupKey, int $localId): void
+    {
+        $this->data['category_dedup'][$dedupKey] = $localId;
     }
 
     public function reset(): void
     {
-        $this->data = [
-            'users' => [],
-            'categories' => [],
-            'listings' => [],
-            'stores' => [],
-        ];
+        foreach (array_keys($this->data) as $k) {
+            $this->data[$k] = [];
+        }
         if (is_file($this->path)) {
             unlink($this->path);
         }

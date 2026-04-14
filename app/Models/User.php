@@ -33,6 +33,7 @@ class User extends Authenticatable implements HasMedia
         'description',
         'password',
         'lang',
+        'currency',
         'provider',
         'provider_id',
         'otp',
