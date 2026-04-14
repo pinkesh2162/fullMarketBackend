@@ -34,14 +34,15 @@ class FirebaseImportListingsCommand extends Command
             (bool) $this->option('skip-images')
         );
 
-        $this->table(
-            ['Metric', 'Count'],
-            [
-                ['Imported / would import', $r['ok']],
-                ['Skipped (already in state)', $r['skip']],
-                ['Errors', $r['err']],
-            ]
-        );
+        $rows = [
+            ['Imported / would import', $r['ok']],
+            ['Skipped (already in state)', $r['skip']],
+            ['Errors', $r['err']],
+        ];
+        if (array_key_exists('missing_category', $r)) {
+            $rows[] = ['Listings with null category (see logs / re-import)', $r['missing_category']];
+        }
+        $this->table(['Metric', 'Count'], $rows);
 
         return $r['err'] > 0 ? Command::FAILURE : Command::SUCCESS;
     }

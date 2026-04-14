@@ -60,6 +60,7 @@ return [
     'firebase_service_account' => env('FIREBASE_SERVICE_ACCOUNT', 'firebase_service_account.json'),
     'media_disc' => env('MEDIA_DISK', 'public'),
     'admin_email' => env('ADMIN_EMAIL'),
+    'moderation_email' => env('MODERATION_EMAIL', env('ADMIN_EMAIL')),
     'asset_url' => env('ASSET_URL'),
 
     /*

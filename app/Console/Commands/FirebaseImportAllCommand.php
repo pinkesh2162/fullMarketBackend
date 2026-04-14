@@ -76,7 +76,7 @@ class FirebaseImportAllCommand extends Command
     }
 
     /**
-     * @param  array{ok:int,skip:int,err:int,pwd_updated?:int}  $r
+     * @param  array{ok:int,skip:int,err:int,pwd_updated?:int,missing_category?:int}  $r
      */
     protected function tableFrom(array $r): void
     {
@@ -85,6 +85,10 @@ class FirebaseImportAllCommand extends Command
         if (array_key_exists('pwd_updated', $r)) {
             $headers[] = 'pwd_updated';
             $row[] = $r['pwd_updated'];
+        }
+        if (array_key_exists('missing_category', $r)) {
+            $headers[] = 'no_category';
+            $row[] = $r['missing_category'];
         }
         $this->table($headers, [$row]);
     }

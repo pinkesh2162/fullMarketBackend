@@ -63,5 +63,8 @@
     "all_notifications_marked_as_read": "Todas las notificaciones marcadas como leídas con éxito",
     "notification_deleted": "Notificación eliminada con éxito",
     "notifications_deleted": "Notificaciones eliminadas con éxito",
-    "all_notifications_deleted": "Todas las notificaciones eliminadas con éxito"
+    "all_notifications_deleted": "Todas las notificaciones eliminadas con éxito",
+    "report_submitted": "Su informe se envió correctamente.",
+    "cannot_report_yourself": "No puede denunciar su propia cuenta.",
+    "report_message_invalid": "Introduzca un mensaje de informe válido."
 }

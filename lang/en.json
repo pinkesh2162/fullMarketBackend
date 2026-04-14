@@ -63,5 +63,8 @@
     "all_notifications_marked_as_read": "All notifications marked as read successfully",
     "notification_deleted": "Notification deleted successfully",
     "notifications_deleted": "Notifications deleted successfully",
-    "all_notifications_deleted": "All notifications deleted successfully"
+    "all_notifications_deleted": "All notifications deleted successfully",
+    "report_submitted": "Your report was submitted successfully.",
+    "cannot_report_yourself": "You cannot report your own account.",
+    "report_message_invalid": "Please enter a valid report message."
 }

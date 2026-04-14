@@ -42,4 +42,17 @@ return [
     */
     'images_by_name' => require __DIR__.'/category_image_map.php',
 
+    /*
+    |--------------------------------------------------------------------------
+    | Firebase listing import: "Other" display name → existing category
+    |--------------------------------------------------------------------------
+    |
+    | Firestore often stores categoryName "Other". Map it to this seeded parent name
+    | (must exist in DB). Override: FIREBASE_IMPORT_OTHER_CATEGORY
+    |
+    */
+    'firebase_import_other_category_name' => env(
+        'FIREBASE_IMPORT_OTHER_CATEGORY',
+        'Other Services'
+    ),
 ];

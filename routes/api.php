@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\FriendRequestController;
 use App\Http\Controllers\Api\ListingController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SearchSuggestionController;
 use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\Api\StoreController;
@@ -106,6 +107,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/contacts/{id}/block', [ContactController::class, 'blockUser']);
     Route::post('/contacts/{id}/unblock', [ContactController::class, 'unblockUser']);
     Route::get('/contacts/blocked', [ContactController::class, 'getBlockedUsers']);
+
+    // Reports (moderation inbox; reporter from token only)
+    Route::middleware(['throttle:reports'])->group(function () {
+        Route::post('listing/report', [ReportController::class, 'reportListing']);
+        Route::post('user/report', [ReportController::class, 'reportUser']);
+    });
 
     // Friend Requests
     // received list

@@ -240,7 +240,10 @@ class FirebaseImportService
             $id = (string) $doc['__id'];
             $data = $this->normalizeUtf8Recursive($doc['data']);
             $parentFb = isset($data['parentId']) && is_string($data['parentId']) ? $data['parentId'] : null;
-            $name = isset($data['name']) && is_string($data['name']) ? $data['name'] : $id;
+            $name = isset($data['name']) && is_string($data['name']) ? trim($data['name']) : '';
+            if ($name === '') {
+                $name = $id;
+            }
             $pass1[] = compact('id', 'name', 'parentFb', 'data', 'path');
             $n++;
         }
@@ -282,7 +285,7 @@ class FirebaseImportService
                 try {
                     $cat = Category::query()->create([
                         'user_id' => null,
-                        'name' => Str::limit($row['name'], 250, ''),
+                        'name' => $this->safeCategoryNameForStorage(Str::limit($row['name'], 250, ''), (string) $row['id']),
                         'parent_id' => $parentId,
                     ]);
                     $this->state->setCategoryId($id, $cat->id);
@@ -1190,7 +1193,7 @@ class FirebaseImportService
 
     /**
      * @param  callable(string):void  $line
-     * @return array{ok:int, skip:int, err:int}
+     * @return array{ok:int, skip:int, err:int, missing_category?:int}
      */
     public function importListings(callable $line, bool $dryRun, ?int $limit, bool $skipImages): array
     {
@@ -1198,6 +1201,7 @@ class FirebaseImportService
         $ok = 0;
         $skip = 0;
         $err = 0;
+        $missingCategory = 0;
         $n = 0;
         $firstErrorMessage = null;
 
@@ -1274,6 +1278,9 @@ class FirebaseImportService
 
             $serviceType = $this->mapServiceType($d);
             $categoryId = $this->resolveCategoryId($d, (int) $userId);
+            if ($categoryId === null) {
+                $missingCategory++;
+            }
 
             $title = $d['title'] ?? $d['name'] ?? 'Untitled';
             $title = is_string($title) ? Str::limit($title, 500, '') : 'Untitled';
@@ -1414,7 +1421,277 @@ class FirebaseImportService
             $line('First error (often repeats): '.$firstErrorMessage);
         }
 
-        return ['ok' => $ok, 'skip' => $skip, 'err' => $err];
+        return ['ok' => $ok, 'skip' => $skip, 'err' => $err, 'missing_category' => $missingCategory];
+    }
+
+    /**
+     * Firestore category document id from listing payload (string or number in JSON).
+     *
+     * @param  array<string, mixed>  $d
+     */
+    protected function firebaseCategoryDocIdFromListingData(array $d): ?string
+    {
+        // Prefer subcategory document ids first — parent fields often point at "Other" or a broad group
+        // while the real leaf category id is in subcategoryId.
+        $paths = [
+            'subcategoryId',
+            'subCategoryId',
+            'serviceSubcategoryId',
+            'service_subcategory_id',
+            'subcategory.id',
+            'subCategory.id',
+            'category.subcategoryId',
+            'category.subCategoryId',
+            'serviceCategory.id',
+            'category.subcategory.id',
+            'category.subCategory.id',
+            'mainServiceCategory',
+            'categoryId',
+            'category_id',
+            'serviceCategoryId',
+            'category.id',
+            'category.categoryId',
+            'categoryDocId',
+        ];
+        foreach ($paths as $path) {
+            $v = str_contains($path, '.') ? data_get($d, $path) : ($d[$path] ?? null);
+            $s = $this->normalizeFirebaseCategoryScalarToString($v);
+            if ($s !== null) {
+                return $s;
+            }
+        }
+
+        return null;
+    }
+
+    protected function normalizeFirebaseCategoryScalarToString(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        if (is_string($value)) {
+            $s = trim($value);
+
+            return $s !== '' ? $s : null;
+        }
+        if (is_int($value) || is_float($value)) {
+            if (is_float($value) && floor($value) !== $value) {
+                return null;
+            }
+
+            return (string) (int) $value;
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $d
+     */
+    protected function categoryDisplayNameForImportedCategory(array $d, string $fallback = 'Imported'): string
+    {
+        foreach ([
+            'subcategoryName',
+            'subCategoryName',
+            'subcategoryDisplayName',
+            'subCategoryDisplayName',
+            'mainServiceSubcategoryDisplayName',
+            'mainServiceCategoryDisplayName',
+            'category_name',
+            'categoryName',
+        ] as $key) {
+            $v = $d[$key] ?? null;
+            if (is_string($v) && trim($v) !== '') {
+                return Str::limit(trim($v), 250, '');
+            }
+        }
+
+        return Str::limit($fallback, 250, '');
+    }
+
+    /**
+     * Never persist an empty category name (Firestore may send name: "").
+     */
+    protected function safeCategoryNameForStorage(string $name, string $firebaseDocIdFallback): string
+    {
+        $n = trim($name);
+        if ($n === '') {
+            $n = trim($firebaseDocIdFallback) !== '' ? $firebaseDocIdFallback : 'Imported';
+        }
+
+        return Str::limit($n, 250, '');
+    }
+
+    protected function findLocalCategoryIdByDisplayName(?string $name): ?int
+    {
+        if (! is_string($name) || trim($name) === '') {
+            return null;
+        }
+        $trimmed = trim($name);
+        if (strcasecmp($trimmed, 'Other') === 0) {
+            return $this->resolveOtherCategoryIdFromConfig();
+        }
+
+        $id = Category::query()
+            ->whereRaw('LOWER(TRIM(name)) = ?', [mb_strtolower($trimmed)])
+            ->orderBy('id')
+            ->value('id');
+
+        return $id !== null ? (int) $id : null;
+    }
+
+    protected function resolveOtherCategoryIdFromConfig(): ?int
+    {
+        $label = config('categories.firebase_import_other_category_name', 'Other Services');
+        if (! is_string($label) || trim($label) === '') {
+            return null;
+        }
+        $trimmed = trim($label);
+        $id = Category::query()
+            ->whereRaw('LOWER(TRIM(name)) = ?', [mb_strtolower($trimmed)])
+            ->orderBy('id')
+            ->value('id');
+
+        return $id !== null ? (int) $id : null;
+    }
+
+    /**
+     * Flatten nested category objects (common in mobile apps) into top-level keys we already read.
+     *
+     * @param  array<string, mixed>  $d
+     * @return array<string, mixed>
+     */
+    protected function mergeNestedCategoryFieldsIntoListingData(array $d): array
+    {
+        foreach (['category', 'serviceCategory', 'selectedCategory', 'mainCategory'] as $nest) {
+            $block = $d[$nest] ?? null;
+            if (! is_array($block)) {
+                continue;
+            }
+            if (empty($d['subcategoryId']) && isset($block['subcategoryId'])) {
+                $d['subcategoryId'] = $block['subcategoryId'];
+            }
+            if (empty($d['subcategoryId']) && isset($block['subCategoryId'])) {
+                $d['subcategoryId'] = $block['subCategoryId'];
+            }
+            if (empty($d['subcategoryName']) && isset($block['subcategoryName']) && is_string($block['subcategoryName'])) {
+                $d['subcategoryName'] = $block['subcategoryName'];
+            }
+            if (empty($d['subcategoryName']) && isset($block['subCategoryName']) && is_string($block['subCategoryName'])) {
+                $d['subcategoryName'] = $block['subCategoryName'];
+            }
+            if (isset($block['subcategory']) && is_array($block['subcategory'])) {
+                $sub = $block['subcategory'];
+                if (empty($d['subcategoryId']) && isset($sub['id'])) {
+                    $d['subcategoryId'] = $sub['id'];
+                }
+                if (empty($d['subcategoryName']) && isset($sub['name']) && is_string($sub['name'])) {
+                    $d['subcategoryName'] = $sub['name'];
+                }
+            }
+        }
+        $sub = $d['subcategory'] ?? null;
+        if (is_array($sub)) {
+            if (empty($d['subcategoryId']) && isset($sub['id'])) {
+                $d['subcategoryId'] = $sub['id'];
+            }
+            if (empty($d['subcategoryName']) && isset($sub['name']) && is_string($sub['name'])) {
+                $d['subcategoryName'] = $sub['name'];
+            }
+        }
+
+        return $d;
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function subcategoryLabelKeys(): array
+    {
+        return [
+            'subcategoryName',
+            'subCategoryName',
+            'subcategoryDisplayName',
+            'subCategoryDisplayName',
+            'mainServiceSubcategoryDisplayName',
+        ];
+    }
+
+    /**
+     * First non-empty subcategory label (not "Other").
+     *
+     * @param  array<string, mixed>  $d
+     */
+    protected function firstSubcategoryLabelFromListingData(array $d): ?string
+    {
+        foreach ($this->subcategoryLabelKeys() as $key) {
+            $v = $d[$key] ?? null;
+            if (! is_string($v) || trim($v) === '') {
+                continue;
+            }
+            if (strcasecmp(trim($v), 'Other') === 0) {
+                continue;
+            }
+
+            return trim($v);
+        }
+
+        return null;
+    }
+
+    /**
+     * Match a child category under a given parent by subcategory display fields.
+     */
+    protected function findChildCategoryIdUnderParent(int $parentId, array $d): ?int
+    {
+        $label = $this->firstSubcategoryLabelFromListingData($d);
+        if ($label === null) {
+            return null;
+        }
+
+        $id = Category::query()
+            ->where('parent_id', $parentId)
+            ->whereRaw('LOWER(TRIM(name)) = ?', [mb_strtolower($label)])
+            ->orderBy('id')
+            ->value('id');
+
+        return $id !== null ? (int) $id : null;
+    }
+
+    /**
+     * When state maps a Firestore id to a root category, prefer a leaf row using subcategory labels.
+     *
+     * @param  array<string, mixed>  $d
+     */
+    protected function refineResolvedCategoryIdFromParentToLeaf(int $resolvedId, array $d): ?int
+    {
+        $row = Category::query()->find($resolvedId);
+        if ($row === null) {
+            return null;
+        }
+        if ($row->parent_id !== null) {
+            return null;
+        }
+
+        $underParent = $this->findChildCategoryIdUnderParent($resolvedId, $d);
+        if ($underParent !== null) {
+            return $underParent;
+        }
+
+        $label = $this->firstSubcategoryLabelFromListingData($d);
+        if ($label === null) {
+            return null;
+        }
+
+        $global = $this->findLocalCategoryIdByDisplayName($label);
+        if ($global !== null && $global !== $resolvedId) {
+            $leaf = Category::query()->find($global);
+            if ($leaf !== null && $leaf->parent_id !== null) {
+                return $global;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -1422,21 +1699,27 @@ class FirebaseImportService
      */
     protected function resolveCategoryId(array $d, int $ownerUserId): ?int
     {
-        $catFb = $d['mainServiceCategory'] ?? $d['categoryId'] ?? $d['category_id'] ?? null;
-        if (is_string($catFb) && $catFb !== '') {
+        $d = $this->mergeNestedCategoryFieldsIntoListingData($d);
+
+        $catFb = $this->firebaseCategoryDocIdFromListingData($d);
+        if ($catFb !== null) {
             $cid = $this->state->getCategoryId($catFb);
             if ($cid !== null && ! Category::query()->whereKey($cid)->exists()) {
                 $this->state->forgetCategory($catFb);
                 $cid = null;
             }
             if ($cid !== null) {
-                return $cid;
+                $refined = $this->refineResolvedCategoryIdFromParentToLeaf((int) $cid, $d);
+
+                return $refined ?? (int) $cid;
             }
-            $name = $d['mainServiceCategoryDisplayName'] ?? $d['category_name'] ?? $d['categoryName'] ?? 'Imported';
-            $name = is_string($name) ? $name : 'Imported';
+            $name = $this->safeCategoryNameForStorage(
+                $this->categoryDisplayNameForImportedCategory($d),
+                $catFb
+            );
             $cat = Category::query()->create([
                 'user_id' => $ownerUserId,
-                'name' => Str::limit($name, 250, ''),
+                'name' => $name,
                 'parent_id' => null,
             ]);
             $this->state->setCategoryId($catFb, (int) $cat->id);
@@ -1445,11 +1728,26 @@ class FirebaseImportService
             return (int) $cat->id;
         }
 
-        $name = $d['category_name'] ?? $d['categoryName'] ?? null;
-        if (is_string($name) && $name !== '' && $name !== 'Other') {
-            $found = Category::query()->where('name', $name)->orderBy('id')->value('id');
-
-            return $found ? (int) $found : null;
+        // Subcategory labels first: exports often set categoryName to "Other" while the real
+        // classification is in subcategoryName / mainServiceSubcategoryDisplayName.
+        foreach ([
+            'subcategoryName',
+            'subCategoryName',
+            'subcategoryDisplayName',
+            'subCategoryDisplayName',
+            'mainServiceSubcategoryDisplayName',
+            'mainServiceCategoryDisplayName',
+            'category_name',
+            'categoryName',
+        ] as $key) {
+            $v = $d[$key] ?? null;
+            if (! is_string($v) || trim($v) === '') {
+                continue;
+            }
+            $found = $this->findLocalCategoryIdByDisplayName($v);
+            if ($found !== null) {
+                return $found;
+            }
         }
 
         return null;
@@ -1600,5 +1898,130 @@ class FirebaseImportService
         }
 
         return ['ok' => 1, 'skip' => 0, 'err' => 0];
+    }
+
+    /**
+     * Update only `service_category` on existing listings using Firestore listing exports.
+     * Does not create listings, download images, or modify any other column. Never writes null
+     * to service_category (unresolved categories are skipped).
+     *
+     * @param  callable(string):void  $line
+     * @return array{ok:int, skip:int, err:int, unchanged:int, missing_category:int, skipped_had_category:int}
+     */
+    public function syncListingCategoriesOnly(callable $line, bool $dryRun, ?int $limit, bool $onlyMissing): array
+    {
+        $paths = $this->jsonFilesIn('listings');
+        $ok = 0;
+        $skip = 0;
+        $err = 0;
+        $unchanged = 0;
+        $missingCategory = 0;
+        $skippedHadCategory = 0;
+        $n = 0;
+
+        foreach ($paths as $path) {
+            if ($limit !== null && $n >= $limit) {
+                break;
+            }
+            $n++;
+
+            $doc = $this->readExport($path);
+            if (! isset($doc['__id'], $doc['data']) || ! is_array($doc['data'])) {
+                $skip++;
+
+                continue;
+            }
+            $fbId = (string) $doc['__id'];
+            $d = $this->normalizeUtf8Recursive($doc['data']);
+
+            $listingId = $this->resolveLocalListingIdForFirebaseListingDoc($fbId);
+            if ($listingId === null) {
+                $skip++;
+                Log::debug('firebase-import: sync category — no local listing', ['firebase_doc' => $fbId]);
+
+                continue;
+            }
+
+            $listing = Listing::query()->find($listingId);
+            if ($listing === null) {
+                $skip++;
+
+                continue;
+            }
+
+            if ($onlyMissing && $listing->service_category !== null) {
+                $skippedHadCategory++;
+
+                continue;
+            }
+
+            $categoryId = $this->resolveCategoryId($d, (int) $listing->user_id);
+            if ($categoryId === null) {
+                $missingCategory++;
+                Log::debug('firebase-import: sync category — unresolved', ['firebase_doc' => $fbId, 'listing_id' => $listingId]);
+
+                continue;
+            }
+
+            if (! Category::query()->whereKey($categoryId)->exists()) {
+                Log::warning('firebase-import: sync category — invalid category id', ['firebase_doc' => $fbId, 'category_id' => $categoryId]);
+                $err++;
+
+                continue;
+            }
+
+            if ((int) $listing->service_category === (int) $categoryId) {
+                $unchanged++;
+
+                continue;
+            }
+
+            if ($dryRun) {
+                $ok++;
+
+                continue;
+            }
+
+            try {
+                Listing::query()->whereKey($listingId)->update([
+                    'service_category' => $categoryId,
+                    'updated_at' => now(),
+                ]);
+                $ok++;
+            } catch (Throwable $e) {
+                Log::error('firebase-import: sync listing category', ['id' => $listingId, 'e' => $e->getMessage()]);
+                $line("Listing {$fbId}: ".$e->getMessage());
+                $err++;
+            }
+        }
+
+        return [
+            'ok' => $ok,
+            'skip' => $skip,
+            'err' => $err,
+            'unchanged' => $unchanged,
+            'missing_category' => $missingCategory,
+            'skipped_had_category' => $skippedHadCategory,
+        ];
+    }
+
+    /**
+     * Local listing id: import state map, else additional_info.firebase.document_id from Firebase import.
+     */
+    protected function resolveLocalListingIdForFirebaseListingDoc(string $firebaseDocId): ?int
+    {
+        $mapped = $this->state->getListingId($firebaseDocId);
+        if ($mapped !== null) {
+            if (Listing::query()->whereKey($mapped)->exists()) {
+                return (int) $mapped;
+            }
+            $this->state->forgetListing($firebaseDocId);
+        }
+
+        $fromJson = Listing::query()
+            ->where('additional_info->firebase->document_id', $firebaseDocId)
+            ->value('id');
+
+        return $fromJson !== null ? (int) $fromJson : null;
     }
 }
