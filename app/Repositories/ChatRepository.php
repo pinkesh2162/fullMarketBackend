@@ -5,7 +5,7 @@ namespace App\Repositories;
 use App\Exceptions\ApiOperationFailedException;
 use App\Models\Conversation;
 use App\Models\ConversationParticipant;
-use App\Models\FriendRequest;
+//use App\Models\FriendRequest;
 use App\Models\Message;
 use App\Models\MessageParticipantHide;
 use App\Models\Store;
@@ -163,12 +163,12 @@ class ChatRepository extends BaseRepository
             }
 
             $this->assertSenderIdentityAllowed($auth, (int) $data['sender_id'], $senderType);
-            $this->assertParticipantsAreConnected(
-                (int) $data['sender_id'],
-                $senderType,
-                (int) $data['recipient_id'],
-                $recipientType
-            );
+//            $this->assertParticipantsAreConnected(
+//                (int) $data['sender_id'],
+//                $senderType,
+//                (int) $data['recipient_id'],
+//                $recipientType
+//            );
 
             return DB::transaction(function () use ($data, $senderType, $recipientType) {
                 $conversation = Conversation::whereHas('participants', function ($q) use ($data, $senderType) {
@@ -534,26 +534,26 @@ class ChatRepository extends BaseRepository
     /**
      * Messaging is only allowed for accepted friend/connection requests (user↔user, user↔store, store↔store).
      */
-    private function assertParticipantsAreConnected(int $aId, string $aType, int $bId, string $bType): void
-    {
-        $aAlias = $aType === 'store' ? 'store' : 'user';
-        $bAlias = $bType === 'store' ? 'store' : 'user';
-
-        $exists = FriendRequest::query()
-            ->where('status', 'accepted')
-            ->where(function ($q) use ($aId, $aAlias, $bId, $bAlias) {
-                $q->where(function ($q) use ($aId, $aAlias, $bId, $bAlias) {
-                    $q->where('sender_id', $aId)->where('sender_type', $aAlias)
-                        ->where('receiver_id', $bId)->where('receiver_type', $bAlias);
-                })->orWhere(function ($q) use ($aId, $aAlias, $bId, $bAlias) {
-                    $q->where('sender_id', $bId)->where('sender_type', $bAlias)
-                        ->where('receiver_id', $aId)->where('receiver_type', $aAlias);
-                });
-            })
-            ->exists();
-
-        if (! $exists) {
-            throw new ApiOperationFailedException('You can only message contacts you are connected with', 403);
-        }
-    }
+//    private function assertParticipantsAreConnected(int $aId, string $aType, int $bId, string $bType): void
+//    {
+//        $aAlias = $aType === 'store' ? 'store' : 'user';
+//        $bAlias = $bType === 'store' ? 'store' : 'user';
+//
+//        $exists = FriendRequest::query()
+//            ->where('status', 'accepted')
+//            ->where(function ($q) use ($aId, $aAlias, $bId, $bAlias) {
+//                $q->where(function ($q) use ($aId, $aAlias, $bId, $bAlias) {
+//                    $q->where('sender_id', $aId)->where('sender_type', $aAlias)
+//                        ->where('receiver_id', $bId)->where('receiver_type', $bAlias);
+//                })->orWhere(function ($q) use ($aId, $aAlias, $bId, $bAlias) {
+//                    $q->where('sender_id', $bId)->where('sender_type', $bAlias)
+//                        ->where('receiver_id', $aId)->where('receiver_type', $aAlias);
+//                });
+//            })
+//            ->exists();
+//
+//        if (! $exists) {
+//            throw new ApiOperationFailedException('You can only message contacts you are connected with', 403);
+//        }
+//    }
 }

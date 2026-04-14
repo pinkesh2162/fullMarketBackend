@@ -96,6 +96,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/chat/conversations/{id}/messages', [ChatController::class, 'getMessages']);
     Route::delete('/chat/conversations/{id}', [ChatController::class, 'deleteConversation']);
     Route::post('/chat/messages/send', [ChatController::class, 'sendMessage']);
+    /** Listing-based entry for mobile: resolves seller (store or user) from listing; no friendship required. */
+    Route::post('/chat/messages/send-to-seller', [ChatController::class, 'sendMessageToSeller']);
     Route::post('/chat/messages/{id}/delete', [ChatController::class, 'deleteMessage']);
     Route::get('/chat/unread-count', [ChatController::class, 'getUnreadCount']);
     Route::get('/chat/tab-count', [ChatController::class, 'getChatTabCounts']);

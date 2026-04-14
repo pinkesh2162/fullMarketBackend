@@ -7,6 +7,7 @@ use App\Events\MessageSent;
 use App\Events\UserSocialRefresh;
 use App\Http\Controllers\Controller;
 use App\Models\Conversation;
+use App\Models\Listing;
 use App\Models\Store;
 use App\Repositories\ChatRepository;
 use App\Repositories\ContactRepository;
@@ -124,6 +125,52 @@ class ChatController extends Controller
     }
 
     /**
+     * Mobile-friendly: start or continue a conversation with the seller of a listing by `listing_id` only.
+     * Uses the same delivery pipeline as {@see sendMessage} — no friend/connection requirement.
+     * Recipient is the listing's store (if `store_id` set) else the listing owner user.
+     */
+    public function sendMessageToSeller(Request $request)
+    {
+        $request->validate([
+            'listing_id' => 'required|integer|exists:listings,id',
+            'body' => 'nullable|string',
+            'type' => 'nullable|in:text,image,video,audio,document',
+            'media' => 'nullable|file',
+            'images' => 'nullable',
+            'videos' => 'nullable',
+            'audios' => 'nullable',
+            'documents' => 'nullable',
+        ]);
+
+        $this->validateChatMediaFiles($request);
+
+        $listing = Listing::with('store')->findOrFail((int) $request->input('listing_id'));
+        $user = $request->user();
+
+        if ((int) $listing->user_id === (int) $user->id) {
+            return $this->actionFailure('You cannot message your own listing', null, 400);
+        }
+
+        if ($listing->store_id) {
+            $store = $listing->store ?? Store::find($listing->store_id);
+            if ($store && (int) $store->user_id === (int) $user->id) {
+                return $this->actionFailure('You cannot message your own store listing', null, 400);
+            }
+        }
+
+        $request->merge([
+            'sender_id' => (string) $user->id,
+            'sender_type' => 'User',
+            'recipient_id' => $listing->store_id
+                ? (string) $listing->store_id
+                : (string) $listing->user_id,
+            'recipient_type' => $listing->store_id ? 'Store' : 'User',
+        ]);
+
+        return $this->sendMessage($request);
+    }
+
+    /**
      * Delete a chat message for the current participant only, or for all participants (sender only).
      *
      * @return \Illuminate\Http\JsonResponse
@@ -185,7 +232,7 @@ class ChatController extends Controller
             'actor_id' => 'nullable|numeric',
             'actor_type' => 'nullable|in:User,Store',
         ]);
-        
+
         $actorId = (int) ($request->input('actor_id') ?? auth()->id());
         $actorTypeRaw = $request->input('actor_type', 'User');
         $actorType = strtolower((string) $actorTypeRaw) === 'store' ? 'store' : 'user';
