@@ -64,14 +64,20 @@ class ChatRepository extends BaseRepository
 
                     $other = $conversation->participants->where('id', '!=', $me->id)->first();
 
+                    $participant = $other->participant;
+                    $participant['participant_id'] = $other->participant_id;
+                    $participant['participant_type'] = $other->participant_type;
+                    $participant['name'] = $other->participant->social_name;
+
                     return [
                         'id' => $conversation->id,
-                        'participant' => [
-                            'id' => $other->participant_id,
-                            'type' => $other->participant_type,
-                            'name' => $other->participant->social_name,
-                            'profile_photo' => $other->participant->profile_photo,
-                        ],
+                        'participant' => $participant,
+                        // [
+                        //     'id' => $other->participant_id,
+                        //     'type' => $other->participant_type,
+                        //     'name' => $other->participant->social_name,
+                        //     'profile_photo' => $other->participant->profile_photo,
+                        // ],
                         /** Viewer identity in this thread (user row vs store). */
                         'self' => [
                             'id' => $me->participant_id,
@@ -340,8 +346,14 @@ class ChatRepository extends BaseRepository
             $cid = (int) $message->conversation_id;
             $mid = (int) $message->id;
 
-            $message->delete();
-            $this->refreshConversationLastMessage($conversation);
+            $message->update([
+                'deleted_for_everyone_at' => now(),
+                'deleted_for_everyone_by_id' => $actorId,
+                'deleted_for_everyone_by_type' => $actorType,
+                // Keep row visible, but clear content/media semantics.
+                'body' => null,
+                'type' => 'text',
+            ]);
 
             return [
                 'conversation_id' => $cid,
@@ -371,9 +383,10 @@ class ChatRepository extends BaseRepository
         }
 
         return [
-            'body' => $last->body,
+            'body' => $last->deleted_for_everyone_at ? 'This message was deleted' : $last->body,
             'type' => $last->type,
             'created_at' => $last->created_at->toIso8601String(),
+            'deleted_for_everyone_at' => $last->deleted_for_everyone_at?->toIso8601String(),
         ];
     }
 

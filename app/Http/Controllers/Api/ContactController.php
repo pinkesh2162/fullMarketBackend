@@ -3,8 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\StoreResource;
+use App\Http\Resources\UserResource;
 use App\Mail\ContactMail;
 use App\Models\Contact;
+use App\Models\Store;
+use App\Models\User;
 use App\Repositories\ContactRepository;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -63,6 +67,85 @@ class ContactController extends Controller
         $contacts = $this->contactRepository->getContacts(auth()->user());
 
         return $this->actionSuccess('Contacts retrieved successfully', $contacts);
+    }
+
+    /**
+     * Full user + store payload for a contact. Pass `id` as a user id or store id.
+     * Optional `type` = user|store disambiguates when both could apply; otherwise user is tried first, then store.
+     *
+     * @return JsonResponse
+     */
+    public function getContactProfile(Request $request)
+    {
+        $request->validate([
+            'id' => 'required|integer|min:1',
+            'type' => 'nullable|in:user,store',
+        ]);
+
+        $id = (int) $request->query('id');
+        $type = $request->query('type');
+
+        if ($type === 'user') {
+            $user = User::query()->with(['store', 'media'])->find($id);
+            if (! $user) {
+                return $this->notFound('user_not_found');
+            }
+
+            return $this->actionSuccess('contact_profile_retrieved', $this->contactProfileFromUser($user));
+        }
+
+        if ($type === 'store') {
+            $store = Store::query()->with(['media', 'user.media', 'user.store'])->find($id);
+            if (! $store) {
+                return $this->notFound('store_not_found');
+            }
+
+            return $this->actionSuccess('contact_profile_retrieved', $this->contactProfileFromStore($store));
+        }
+
+        $user = User::query()->with(['store', 'stores', 'media'])->find($id);
+        if ($user) {
+            return $this->actionSuccess('contact_profile_retrieved', $this->contactProfileFromUser($user));
+        }
+
+        $store = Store::query()->with(['media', 'user.media', 'user.store', 'user.stores'])->find($id);
+        if ($store) {
+            return $this->actionSuccess('contact_profile_retrieved', $this->contactProfileFromStore($store));
+        }
+
+        return $this->notFound('profile_not_found');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function contactProfileFromUser(User $user): array
+    {
+        $user->loadMissing(['store', 'stores', 'media']);
+        $stores = $user->stores;
+        $primary = $user->store ?? $stores->first();
+
+        return [
+            'resolved_as' => 'user',
+            'user' => UserResource::make($user)->resolve(request()),
+            'store' => $primary ? (new StoreResource($primary))->resolve(request()) : null,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function contactProfileFromStore(Store $store): array
+    {
+        $store->loadMissing(['media', 'user.media', 'user.store', 'user.stores']);
+        $owner = $store->user;
+        $ownerStores = $owner ? $owner->stores : collect();
+
+        return [
+            'resolved_as' => 'store',
+            'user' => $owner ? UserResource::make($owner)->resolve(request()) : null,
+            'store' => (new StoreResource($store))->resolve(request()),
+        ];
     }
 
     /**

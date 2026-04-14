@@ -24,6 +24,9 @@ class Message extends Model implements HasMedia
         'body',
         'type',
         'read_at',
+        'deleted_for_everyone_at',
+        'deleted_for_everyone_by_id',
+        'deleted_for_everyone_by_type',
     ];
 
     /**
@@ -31,6 +34,7 @@ class Message extends Model implements HasMedia
      */
     protected $casts = [
         'read_at' => 'datetime',
+        'deleted_for_everyone_at' => 'datetime',
     ];
 
     protected $appends = ['media_url', 'all_media_urls'];

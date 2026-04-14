@@ -99,6 +99,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Friends & Discovery
     Route::get('/contacts', [ContactController::class, 'getContacts']);
+    Route::get('/get-contact-profile', [ContactController::class, 'getContactProfile']);
     Route::get('/contacts/discover', [ContactController::class, 'discoverUsers']);
     Route::post('/contacts/{id}/block', [ContactController::class, 'blockUser']);
     Route::post('/contacts/{id}/unblock', [ContactController::class, 'unblockUser']);
