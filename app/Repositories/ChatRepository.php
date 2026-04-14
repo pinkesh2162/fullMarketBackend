@@ -62,12 +62,19 @@ class ChatRepository extends BaseRepository
                     $me = $conversation->participants->where('participant_id', $user->id)->where('participant_type', 'user')->first()
                         ?? $conversation->participants->whereIn('participant_id', $storeIds)->where('participant_type', 'store')->first();
 
+                    if (! $me) {
+                        return null;
+                    }
+
                     $other = $conversation->participants->where('id', '!=', $me->id)->first();
+                    if (! $other || ! $other->participant) {
+                        return null;
+                    }
 
                     $participant = $other->participant;
-                    $participant['participant_id'] = $other->participant_id;
-                    $participant['participant_type'] = $other->participant_type;
-                    $participant['name'] = $other->participant->social_name;
+                    $participant['participant_id'] = @$other->participant_id;
+                    $participant['participant_type'] = @$other->participant_type;
+                    $participant['name'] = @$other->participant->social_name;
 
                     return [
                         'id' => $conversation->id,
@@ -88,7 +95,9 @@ class ChatRepository extends BaseRepository
                         'unread_count' => $me->unread_count,
                         'updated_at' => $conversation->updated_at->toIso8601String(),
                     ];
-                });
+                })
+                ->filter()
+                ->values();
 
             return $conversation;
         } catch (Exception $ex) {
@@ -360,6 +369,88 @@ class ChatRepository extends BaseRepository
                 'message_id' => $mid,
                 'deleted_for_everyone' => true,
             ];
+        } catch (ApiOperationFailedException $e) {
+            throw $e;
+        } catch (Exception $ex) {
+            throw new ApiOperationFailedException($ex->getMessage(), (int) $ex->getCode());
+        }
+    }
+
+    /**
+     * Delete conversation only for current participant (WhatsApp-style "clear chat for me").
+     * Receiver/other participants keep their full conversation/messages/media.
+     * If no participants remain, hard-delete conversation + messages + media as cleanup.
+     *
+     * @return array{
+     *   conversation_id:int,
+     *   deleted_for_me:bool,
+     *   deleted_globally:bool,
+     *   messages_deleted:int,
+     *   media_deleted:int
+     * }
+     *
+     * @throws ApiOperationFailedException
+     */
+    public function deleteConversation(int $conversationId, int $actorId, string $actorType): array
+    {
+        try {
+            $actorType = strtolower($actorType) === 'store' ? 'store' : 'user';
+
+            /** @var User $auth */
+            $auth = Auth::user();
+            if (! $auth) {
+                throw new ApiOperationFailedException('Unauthenticated', 401);
+            }
+
+            $this->assertSenderIdentityAllowed($auth, $actorId, $actorType);
+
+            $conversation = Conversation::query()->find($conversationId);
+            if (! $conversation) {
+                throw new ApiOperationFailedException('Conversation not found', 404);
+            }
+
+            $isParticipant = $conversation->participants()
+                ->where('participant_id', $actorId)
+                ->where('participant_type', $actorType)
+                ->exists();
+
+            if (! $isParticipant) {
+                throw new ApiOperationFailedException('You are not a participant in this conversation', 403);
+            }
+
+            return DB::transaction(function () use ($conversation, $actorId, $actorType): array {
+                // Hide all messages for this actor only. Keep participants unchanged
+                // so receiver side still sees normal conversation metadata.
+                Message::withTrashed()
+                    ->where('conversation_id', $conversation->id)
+                    ->select('id')
+                    ->orderBy('id')
+                    ->chunkById(500, function ($messages) use ($actorId, $actorType): void {
+                        foreach ($messages as $message) {
+                            MessageParticipantHide::firstOrCreate([
+                                'message_id' => (int) $message->id,
+                                'participant_id' => $actorId,
+                                'participant_type' => $actorType,
+                            ]);
+                        }
+                    });
+
+                $conversation->participants()
+                    ->where('participant_id', $actorId)
+                    ->where('participant_type', $actorType)
+                    ->update([
+                        'unread_count' => 0,
+                        'last_read_at' => now(),
+                    ]);
+
+                return [
+                    'conversation_id' => (int) $conversation->id,
+                    'deleted_for_me' => true,
+                    'deleted_globally' => false,
+                    'messages_deleted' => 0,
+                    'media_deleted' => 0,
+                ];
+            });
         } catch (ApiOperationFailedException $e) {
             throw $e;
         } catch (Exception $ex) {

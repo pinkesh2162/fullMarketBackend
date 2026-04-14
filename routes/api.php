@@ -93,6 +93,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Chat Module
     Route::get('/chat/conversations', [ChatController::class, 'listConversations']);
     Route::get('/chat/conversations/{id}/messages', [ChatController::class, 'getMessages']);
+    Route::delete('/chat/conversations/{id}', [ChatController::class, 'deleteConversation']);
     Route::post('/chat/messages/send', [ChatController::class, 'sendMessage']);
     Route::post('/chat/messages/{id}/delete', [ChatController::class, 'deleteMessage']);
     Route::get('/chat/unread-count', [ChatController::class, 'getUnreadCount']);

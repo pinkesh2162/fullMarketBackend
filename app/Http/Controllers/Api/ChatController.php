@@ -175,6 +175,33 @@ class ChatController extends Controller
     }
 
     /**
+     * Delete conversation for current actor only (other participant keeps their chat).
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function deleteConversation(Request $request, $id)
+    {
+        $request->validate([
+            'actor_id' => 'nullable|numeric',
+            'actor_type' => 'nullable|in:User,Store',
+        ]);
+        
+        $actorId = (int) ($request->input('actor_id') ?? auth()->id());
+        $actorTypeRaw = $request->input('actor_type', 'User');
+        $actorType = strtolower((string) $actorTypeRaw) === 'store' ? 'store' : 'user';
+
+        try {
+            $result = $this->chatRepository->deleteConversation((int) $id, $actorId, $actorType);
+
+            return $this->actionSuccess('Conversation deleted for you', $result);
+        } catch (\App\Exceptions\ApiOperationFailedException $e) {
+            return $this->actionFailure($e->getMessage(), null, $e->getCode() ?: 400);
+        } catch (\Exception $e) {
+            return $this->serverError($e->getMessage());
+        }
+    }
+
+    /**
      * @return \Illuminate\Http\JsonResponse
      *
      * @throws \App\Exceptions\ApiOperationFailedException

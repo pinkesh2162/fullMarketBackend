@@ -47,23 +47,4 @@ return new class extends Migration
             $table->dropColumn('unique_key');
         });
     }
-
-    private function backfillKeys(string $table): void
-    {
-        $ids = DB::table($table)->whereNull('unique_key')->pluck('id');
-        foreach ($ids as $id) {
-            DB::table($table)->where('id', $id)->update([
-                'unique_key' => $this->generateUniqueKey($table),
-            ]);
-        }
-    }
-
-    private function generateUniqueKey(string $table): string
-    {
-        do {
-            $code = (string) random_int(1000000, 9999999);
-        } while (DB::table($table)->where('unique_key', $code)->exists());
-
-        return $code;
-    }
 };
