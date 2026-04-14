@@ -66,5 +66,11 @@
     "all_notifications_deleted": "All notifications deleted successfully",
     "report_submitted": "Your report was submitted successfully.",
     "cannot_report_yourself": "You cannot report your own account.",
-    "report_message_invalid": "Please enter a valid report message."
+    "report_message_invalid": "Please enter a valid report message.",
+    "listing_hidden": "This listing will be hidden from your feeds.",
+    "seller_blocked": "You will no longer see ads from this seller in your feeds.",
+    "block_seller_single_target": "Send either store_id or seller_user_id, not both.",
+    "block_seller_target_required": "Send store_id or seller_user_id.",
+    "cannot_block_own_store": "You cannot hide ads from your own store.",
+    "cannot_block_yourself_seller": "You cannot block your own account."
 }

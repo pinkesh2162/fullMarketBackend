@@ -1,6 +1,7 @@
 *.log
 .DS_Store
-.env.backup
+.env
+.env.**
 .phpactor.json
 .phpunit.result.cache
 /.fleet
@@ -24,3 +25,5 @@ Thumbs.db
 /public/uploads
 /firebase_service_account.json
 config.bat
+
+/FirebaseDatabase/**

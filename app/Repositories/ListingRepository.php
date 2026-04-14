@@ -8,12 +8,12 @@ use App\Models\Listing;
 use App\Models\SearchSuggestion;
 use Exception;
 use Illuminate\Container\Container as Application;
-use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -21,7 +21,6 @@ use Illuminate\Support\Facades\Log;
 class ListingRepository extends BaseRepository
 {
     /**
-     * @param  Application  $app
      * @throws Exception
      */
     public function __construct(Application $app)
@@ -47,8 +46,6 @@ class ListingRepository extends BaseRepository
 
     /**
      * Records search terms for suggestions.
-     *
-     * @param  string|null  $term
      */
     public function recordSearchTerm(?string $term): void
     {
@@ -71,15 +68,14 @@ class ListingRepository extends BaseRepository
     /**
      * @param  array  $filters
      * @param  int  $perPage
-     *
      * @return LengthAwarePaginator
      */
     public function getListings($filters = [], $perPage = 15)
     {
-//        $version = Cache::get('listing_cache_version', 1);
-        $user = Auth::user();
-//        $userId = $user?->id ?? 'guest';
-//        $filtersHash = md5(serialize($filters));
+        //        $version = Cache::get('listing_cache_version', 1);
+        $user = auth('sanctum')->user();
+        //        $userId = $user?->id ?? 'guest';
+        //        $filtersHash = md5(serialize($filters));
         $hideAds = $filters['hide_ads'] ?? $user?->settings?->hide_ads ?? false;
 
         $query = $this->allQuery()->with(['media'])->filter($filters);
@@ -88,47 +84,50 @@ class ListingRepository extends BaseRepository
             $query->where('service_type', '!=', Listing::OFFER_SERVICE);
         }
 
+        if ($user) {
+            $query->visibleToUserId((int) $user->id);
+        }
+
         $listings = $query->latest()->paginate($perPage);
 
-        if (!empty($filters['title']) || !empty($filters['search_keyword'])) {
+        if (! empty($filters['title']) || ! empty($filters['search_keyword'])) {
             $this->recordSearchTerm($filters['title'] ?? $filters['search_keyword']);
         }
 
         return $listings;
-//        $cacheKey = "listings_v{$version}_{$userId}_{$perPage}_{$filtersHash}";
+        //        $cacheKey = "listings_v{$version}_{$userId}_{$perPage}_{$filtersHash}";
 
-//        return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($filters, $perPage, $user) {
-//            $hideAds = $filters['hide_ads'] ?? $user?->settings?->hide_ads ?? false;
-//
-//            $query = $this->allQuery()->with(['media'])->filter($filters);
-//
-//            if ($hideAds) {
-//                $query->where('service_type', '!=', Listing::OFFER_SERVICE);
-//            }
-//
-//            $listings = $query->latest()->paginate($perPage);
-//
-//            if (!empty($filters['title']) || !empty($filters['search_keyword'])) {
-//                $this->recordSearchTerm($filters['title'] ?? $filters['search_keyword']);
-//            }
-//
-//            return $listings;
-//        });
+        //        return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($filters, $perPage, $user) {
+        //            $hideAds = $filters['hide_ads'] ?? $user?->settings?->hide_ads ?? false;
+        //
+        //            $query = $this->allQuery()->with(['media'])->filter($filters);
+        //
+        //            if ($hideAds) {
+        //                $query->where('service_type', '!=', Listing::OFFER_SERVICE);
+        //            }
+        //
+        //            $listings = $query->latest()->paginate($perPage);
+        //
+        //            if (!empty($filters['title']) || !empty($filters['search_keyword'])) {
+        //                $this->recordSearchTerm($filters['title'] ?? $filters['search_keyword']);
+        //            }
+        //
+        //            return $listings;
+        //        });
     }
 
     /**
      * @param  array  $filters
      * @param  int  $perPage
-     *
      * @return LengthAwarePaginator
      */
     public function getFeaturedListings($filters = [], $perPage = 3)
     {
-//        $version = Cache::get('listing_cache_version', 1);
-        $user = Auth::user();
-//        $userId = $user?->id ?? 'guest';
-//        $filtersHash = md5(serialize($filters));
-//        $cacheKey = "featured_listings_v{$version}_{$userId}_{$perPage}_{$filtersHash}";
+        //        $version = Cache::get('listing_cache_version', 1);
+        $user = auth('sanctum')->user();
+        //        $userId = $user?->id ?? 'guest';
+        //        $filtersHash = md5(serialize($filters));
+        //        $cacheKey = "featured_listings_v{$version}_{$userId}_{$perPage}_{$filtersHash}";
 
         $hideAds = $filters['hide_ads'] ?? $user?->settings?->hide_ads ?? false;
 
@@ -136,73 +135,74 @@ class ListingRepository extends BaseRepository
 
         if ($hideAds) {
             $query->where('service_type', '!=', Listing::OFFER_SERVICE);
+        }
+
+        if ($user) {
+            $query->visibleToUserId((int) $user->id);
         }
 
         $listings = $query->orderByDesc('views_count')
             ->latest()
             ->paginate($perPage);
 
-        if (!empty($filters['search_keyword'])) {
+        if (! empty($filters['search_keyword'])) {
             $this->recordSearchTerm($filters['search_keyword']);
         }
 
         return $listings;
-//        return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($filters, $perPage, $user) {
-//            $hideAds = $filters['hide_ads'] ?? $user?->settings?->hide_ads ?? false;
-//
-//            $query = $this->allQuery()->with(['media'])->filter($filters);
-//
-//            if ($hideAds) {
-//                $query->where('service_type', '!=', Listing::OFFER_SERVICE);
-//            }
-//
-//            $listings = $query->orderByDesc('views_count')
-//                ->latest()
-//                ->paginate($perPage);
-//
-//            if (!empty($filters['search_keyword'])) {
-//                $this->recordSearchTerm($filters['search_keyword']);
-//            }
-//
-//            return $listings;
-//        });
+        //        return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($filters, $perPage, $user) {
+        //            $hideAds = $filters['hide_ads'] ?? $user?->settings?->hide_ads ?? false;
+        //
+        //            $query = $this->allQuery()->with(['media'])->filter($filters);
+        //
+        //            if ($hideAds) {
+        //                $query->where('service_type', '!=', Listing::OFFER_SERVICE);
+        //            }
+        //
+        //            $listings = $query->orderByDesc('views_count')
+        //                ->latest()
+        //                ->paginate($perPage);
+        //
+        //            if (!empty($filters['search_keyword'])) {
+        //                $this->recordSearchTerm($filters['search_keyword']);
+        //            }
+        //
+        //            return $listings;
+        //        });
     }
 
     /**
      * @param  array  $filters
      * @param  int  $perPage
-     *
      * @return LengthAwarePaginator
      */
     public function getMyListings($filters = [], $perPage = 15)
     {
-//        $version = Cache::get('listing_cache_version', 1);
-        $userId = Auth::id();
-//        $filtersHash = md5(serialize($filters));
-//        $cacheKey = "my_listings_v{$version}_{$userId}_{$perPage}_{$filtersHash}";
+        //        $version = Cache::get('listing_cache_version', 1);
+        $userId = auth('sanctum')->id();
+        //        $filtersHash = md5(serialize($filters));
+        //        $cacheKey = "my_listings_v{$version}_{$userId}_{$perPage}_{$filtersHash}";
 
         return $this->allQuery()->where('user_id', $userId)
             ->filter($filters)
             ->latest()
             ->paginate($perPage);
 
-//        return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($filters, $perPage, $userId) {
-//            return $this->allQuery()->where('user_id', $userId)
-//                ->filter($filters)
-//                ->latest()
-//                ->paginate($perPage);
-//        });
+        //        return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($filters, $perPage, $userId) {
+        //            return $this->allQuery()->where('user_id', $userId)
+        //                ->filter($filters)
+        //                ->latest()
+        //                ->paginate($perPage);
+        //        });
     }
 
     /**
-     * @param  array  $data
      * @param  null  $images
-     *
      * @return mixed
      */
     public function createListing(array $data, $images = null)
     {
-        $user = Auth::user();
+        $user = auth('sanctum')->user();
         $data['user_id'] = $user->id;
         $data['store_id'] = @$user->store ? $user->store->id : null;
 
@@ -210,7 +210,7 @@ class ListingRepository extends BaseRepository
 
         if ($images && is_array($images)) {
             foreach ($images as $image) {
-                if ($image instanceof \Illuminate\Http\UploadedFile) {
+                if ($image instanceof UploadedFile) {
                     $listing->addMedia($image)
                         ->toMediaCollection(Listing::LISTING_IMAGES, config('app.media_disc', 'public'));
                 }
@@ -220,22 +220,19 @@ class ListingRepository extends BaseRepository
         // Send FCM notification
 
         if ($user && $user->fcm_token) {
-            $title = "Listing Created";
+            $title = 'Listing Created';
             $body = "Your listing '{$listing->title}' has been created successfully.";
             dispatch_sync(new SendFcmNotificationJob($user->fcm_token, $title, $body, ['listing_id' => $listing->id], $user->id));
         }
 
-//        $this->clearListingCache();
+        //        $this->clearListingCache();
 
         return $listing;
     }
 
     /**
-     * @param  Listing  $listing
-     * @param  array  $data
      * @param  null  $images
-     *
-     * @return Builder|Builder[]|\Illuminate\Database\Eloquent\Collection|Model
+     * @return Builder|Builder[]|EloquentCollection|Model
      */
     public function updateListing(Listing $listing, array $data, $images = null)
     {
@@ -243,29 +240,28 @@ class ListingRepository extends BaseRepository
 
         if ($images && is_array($images)) {
             foreach ($images as $image) {
-                if ($image instanceof \Illuminate\Http\UploadedFile) {
+                if ($image instanceof UploadedFile) {
                     $listing->addMedia($image)
                         ->toMediaCollection(Listing::LISTING_IMAGES, config('app.media_disc', 'public'));
                 }
             }
         }
 
-//        $this->clearListingCache();
+        //        $this->clearListingCache();
 
         return $listing->fresh(['user', 'store', 'category']);
     }
 
     /**
-     * @param  Listing  $listing
      * @throws Exception
-     * @return bool
      */
     public function deleteListing(Listing $listing): bool
     {
         $deleted = $this->delete($listing->id);
-//        if ($deleted) {
-//            $this->clearListingCache();
-//        }
+
+        //        if ($deleted) {
+        //            $this->clearListingCache();
+        //        }
         return $deleted;
     }
 
@@ -292,8 +288,6 @@ class ListingRepository extends BaseRepository
      *
      * @param  int  $perPage  Page size (also reads as `limit` from API)
      * @param  int|null  $page  1-based page; defaults to current request page
-     *
-     * @return LengthAwarePaginator
      */
     public function getRelatedListings(Listing $listing, int $perPage = 6, ?int $page = null): LengthAwarePaginator
     {
@@ -308,7 +302,7 @@ class ListingRepository extends BaseRepository
         $anchorTokens = $this->anchorTokenSetForListing($listing);
         $recencyCol = ($cfg['order_by_published_at'] ?? false) ? 'created_at' : 'updated_at';
 
-        $hideAds = Auth::user()?->settings?->hide_ads ?? false;
+        $hideAds = auth('sanctum')->user()?->settings?->hide_ads ?? false;
 
         Log::debug('[RelatedListings] start', [
             'listing_id' => $listing->id,
@@ -538,11 +532,18 @@ class ListingRepository extends BaseRepository
 
     protected function baseRelatedQuery(Listing $exclude): Builder
     {
-        return Listing::query()
+        $query = Listing::query()
             ->whereKeyNot($exclude->id)
             ->where(function ($q) {
                 $q->where('availability', true)->orWhereNull('availability');
             });
+
+        $viewerId = auth('sanctum')->id();
+        if ($viewerId) {
+            $query->visibleToUserId((int) $viewerId);
+        }
+
+        return $query;
     }
 
     /**
@@ -1059,11 +1060,6 @@ class ListingRepository extends BaseRepository
         return collect(array_column($rows, 'l'));
     }
 
-    /**
-     * @param  Listing  $listing
-     *
-     * @return bool
-     */
     public function incrementViews(Listing $listing): bool
     {
         return $listing->increment('views_count');
@@ -1072,7 +1068,8 @@ class ListingRepository extends BaseRepository
     /**
      * @return array
      */
-    public function getCount(){
+    public function getCount()
+    {
         $listingCount = Listing::toBase()
             ->where('user_id', auth('sanctum')->id())
             ->count();

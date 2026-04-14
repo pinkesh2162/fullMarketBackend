@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -96,6 +97,35 @@ class Listing extends Model implements HasMedia
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class, 'service_category');
+    }
+
+    /**
+     * For authenticated viewers: omit listings they hid or sellers/stores they blocked (feeds, search, related).
+     * Detail views (e.g. GET listing by id) intentionally do not use this scope.
+     */
+    public function scopeVisibleToUserId(Builder $query, ?int $userId): Builder
+    {
+        if ($userId === null || $userId < 1) {
+            return $query;
+        }
+
+        return $query
+            ->whereNotExists(function ($q) use ($userId) {
+                $q->from('user_hidden_listings as uhl')
+                    ->whereColumn('uhl.listing_id', 'listings.id')
+                    ->where('uhl.user_id', $userId);
+            })
+            ->whereNotExists(function ($q) use ($userId) {
+                $q->from('user_blocked_stores as ubs')
+                    ->whereColumn('ubs.store_id', 'listings.store_id')
+                    ->where('ubs.user_id', $userId)
+                    ->whereNotNull('listings.store_id');
+            })
+            ->whereNotExists(function ($q) use ($userId) {
+                $q->from('user_blocked_sellers as ubsl')
+                    ->whereColumn('ubsl.blocked_user_id', 'listings.user_id')
+                    ->where('ubsl.user_id', $userId);
+            });
     }
 
     public function getImagesAttribute()

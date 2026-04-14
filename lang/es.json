@@ -66,5 +66,11 @@
     "all_notifications_deleted": "Todas las notificaciones eliminadas con éxito",
     "report_submitted": "Su informe se envió correctamente.",
     "cannot_report_yourself": "No puede denunciar su propia cuenta.",
-    "report_message_invalid": "Introduzca un mensaje de informe válido."
+    "report_message_invalid": "Introduzca un mensaje de informe válido.",
+    "listing_hidden": "Este anuncio se ocultará de sus listados.",
+    "seller_blocked": "Ya no verá anuncios de este vendedor en sus listados.",
+    "block_seller_single_target": "Envíe store_id o seller_user_id, no ambos.",
+    "block_seller_target_required": "Envíe store_id o seller_user_id.",
+    "cannot_block_own_store": "No puede ocultar anuncios de su propia tienda.",
+    "cannot_block_yourself_seller": "No puede bloquear su propia cuenta."
 }

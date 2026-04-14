@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\Api\StoreController;
 use App\Http\Controllers\Api\StoreFollowController;
 use App\Http\Controllers\Api\StoreRatingController;
+use App\Http\Controllers\Api\UserListingPreferenceController;
 use Illuminate\Support\Facades\Route;
 
 // guest routes
@@ -76,6 +77,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::delete('listings/{id}', [ListingController::class, 'destroy']);
     Route::post('update/listing/{id}', [ListingController::class, 'update']);
     Route::get('/my-listings', [ListingController::class, 'getMyListing']);
+
+    // Feed preferences: hide listing / block seller (canonical: store_id or seller_user_id)
+    Route::post('/user/hidden-listings', [UserListingPreferenceController::class, 'hideListing']);
+    Route::post('/user/blocked-sellers', [UserListingPreferenceController::class, 'blockSeller']);
 
     // favorites routes
     Route::get('/favorites', [FavoriteController::class, 'index']);

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\ApiOperationFailedException;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ListingResource;
 use App\Http\Resources\StoreResource;
@@ -12,6 +13,7 @@ use App\Models\Listing;
 use App\Models\Store;
 use App\Models\User;
 use App\Repositories\ContactRepository;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -60,9 +62,9 @@ class ContactController extends Controller
     }
 
     /**
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \App\Exceptions\ApiOperationFailedException
+     * @throws ApiOperationFailedException
      */
     public function getContacts()
     {
@@ -141,11 +143,14 @@ class ContactController extends Controller
                 return $this->notFound('user_not_found');
             }
 
-            $products = Listing::query()
+            $productsQuery = Listing::query()
                 ->with(['user', 'store', 'category'])
                 ->where('user_id', $user->id)
-                ->latest('id')
-                ->get();
+                ->latest('id');
+            if (auth('sanctum')->check()) {
+                $productsQuery->visibleToUserId((int) auth('sanctum')->id());
+            }
+            $products = $productsQuery->get();
 
             return $this->actionSuccess('public_profile_fetched', [
                 'resolved_as' => 'user',
@@ -161,11 +166,14 @@ class ContactController extends Controller
             return $this->notFound('store_not_found');
         }
 
-        $products = Listing::query()
+        $productsQuery = Listing::query()
             ->with(['user', 'store', 'category'])
             ->where('store_id', $store->id)
-            ->latest('id')
-            ->get();
+            ->latest('id');
+        if (auth('sanctum')->check()) {
+            $productsQuery->visibleToUserId((int) auth('sanctum')->id());
+        }
+        $products = $productsQuery->get();
 
         return $this->actionSuccess('public_profile_fetched', [
             'resolved_as' => 'store',
@@ -209,9 +217,9 @@ class ContactController extends Controller
     }
 
     /**
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      *
-     * @throws \App\Exceptions\ApiOperationFailedException
+     * @throws ApiOperationFailedException
      */
     public function discoverUsers(Request $request)
     {
@@ -259,7 +267,7 @@ class ContactController extends Controller
     }
 
     /**
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function blockUser(Request $request, $id)
     {
@@ -274,7 +282,7 @@ class ContactController extends Controller
 
             $blockerId = $request->blocker_id ?? auth()->id();
             $blockerType = $request->blocker_type ?? 'user';
-            $blockerClass = \Illuminate\Database\Eloquent\Relations\Relation::getMorphedModel($blockerType);
+            $blockerClass = Relation::getMorphedModel($blockerType);
 
             if ($blockerId == $id && $blockerType == $type) {
                 return $this->actionFailure('You cannot block yourself', null, 400);
@@ -306,7 +314,7 @@ class ContactController extends Controller
     }
 
     /**
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function unblockUser(Request $request, $id)
     {
@@ -321,7 +329,7 @@ class ContactController extends Controller
 
             $blockerId = $request->blocker_id ?? auth()->id();
             $blockerType = $request->blocker_type ?? 'user';
-            $blockerClass = \Illuminate\Database\Eloquent\Relations\Relation::getMorphedModel($blockerType);
+            $blockerClass = Relation::getMorphedModel($blockerType);
 
             $blocker = $blockerClass::find($blockerId);
             if (! $blocker) {
@@ -345,13 +353,13 @@ class ContactController extends Controller
     }
 
     /**
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function getBlockedUsers(Request $request)
     {
         $blockerId = $request->query('blocker_id', auth()->id());
         $blockerType = $request->query('blocker_type', 'user');
-        $blockerClass = \Illuminate\Database\Eloquent\Relations\Relation::getMorphedModel($blockerType);
+        $blockerClass = Relation::getMorphedModel($blockerType);
 
         $blocker = $blockerClass::find($blockerId);
         if (! $blocker) {
