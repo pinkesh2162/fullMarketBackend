@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\ListingResource;
 use App\Http\Resources\StoreResource;
 use App\Http\Resources\UserResource;
 use App\Mail\ContactMail;
 use App\Models\Contact;
+use App\Models\Listing;
 use App\Models\Store;
 use App\Models\User;
 use App\Repositories\ContactRepository;
@@ -114,6 +116,64 @@ class ContactController extends Controller
         }
 
         return $this->notFound('profile_not_found');
+    }
+
+    /**
+     * Public lookup by unique key (7 digits) + type, returns profile details and listings/products.
+     *
+     * Query: `unique_id=1234567&type=user|store`
+     *
+     * @return JsonResponse
+     */
+    public function getPublicProfileByUniqueId(Request $request)
+    {
+        $request->validate([
+            'unique_id' => ['required', 'digits:7'],
+            'type' => ['required', 'in:user,store'],
+        ]);
+
+        $uniqueId = (string) $request->query('unique_id');
+        $type = (string) $request->query('type');
+
+        if ($type === 'user') {
+            $user = User::query()->with(['store', 'media'])->where('unique_key', $uniqueId)->first();
+            if (! $user) {
+                return $this->notFound('user_not_found');
+            }
+
+            $products = Listing::query()
+                ->with(['user', 'store', 'category'])
+                ->where('user_id', $user->id)
+                ->latest('id')
+                ->get();
+
+            return $this->actionSuccess('public_profile_fetched', [
+                'resolved_as' => 'user',
+                'unique_id' => $uniqueId,
+                'user' => UserResource::make($user),
+                'store' => $user->store ? StoreResource::make($user->store) : null,
+                'products' => ListingResource::collection($products),
+            ]);
+        }
+
+        $store = Store::query()->with(['media', 'user.media', 'user.store'])->where('unique_key', $uniqueId)->first();
+        if (! $store) {
+            return $this->notFound('store_not_found');
+        }
+
+        $products = Listing::query()
+            ->with(['user', 'store', 'category'])
+            ->where('store_id', $store->id)
+            ->latest('id')
+            ->get();
+
+        return $this->actionSuccess('public_profile_fetched', [
+            'resolved_as' => 'store',
+            'unique_id' => $uniqueId,
+            'user' => $store->user ? UserResource::make($store->user) : null,
+            'store' => StoreResource::make($store),
+            'products' => ListingResource::collection($products),
+        ]);
     }
 
     /**

@@ -58,12 +58,16 @@ class StoreRepository extends BaseRepository
                 'social_media' => $data['social_media'] ?? null,
             ];
             if (! empty($store)) {
+                if (empty($store->unique_key)) {
+                    $data['unique_key'] = $this->generateUniqueStoreKey();
+                }
                 $store = Store::updateOrCreate(
                     ['user_id' => $userId],
                     $data
                 );
             } else {
                 $data['user_id'] = $userId;
+                $data['unique_key'] = $this->generateUniqueStoreKey();
 
                 $store = Store::create($data);
 
@@ -100,6 +104,15 @@ class StoreRepository extends BaseRepository
             DB::rollBack();
             throw new ApiOperationFailedException($e->getMessage(), 500);
         }
+    }
+
+    private function generateUniqueStoreKey(): string
+    {
+        do {
+            $code = (string) random_int(1000000, 9999999);
+        } while (Store::where('unique_key', $code)->exists());
+
+        return $code;
     }
 
     /**

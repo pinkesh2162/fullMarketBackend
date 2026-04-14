@@ -83,6 +83,7 @@ class UserRepository extends BaseRepository
                 $otp = random_int(100000, 999999);
                 $data['otp'] = $otp;
                 $data['otp_expires_at'] = now()->addMinutes(10);
+                $data['unique_key'] = $this->generateUniqueUserKey();
 
                 $user = $this->create($data);
 
@@ -191,6 +192,7 @@ class UserRepository extends BaseRepository
             }
 
             $user = $this->create([
+                'unique_key' => $this->generateUniqueUserKey(),
                 'first_name' => $firstName,
                 'last_name' => $lastName,
                 'email' => $email,
@@ -350,6 +352,15 @@ class UserRepository extends BaseRepository
             DB::rollBack();
             throw new ApiOperationFailedException($e->getMessage(), 422);
         }
+    }
+
+    private function generateUniqueUserKey(): string
+    {
+        do {
+            $code = (string) random_int(1000000, 9999999);
+        } while (User::where('unique_key', $code)->exists());
+
+        return $code;
     }
 
     /**

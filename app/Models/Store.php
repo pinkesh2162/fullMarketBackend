@@ -15,6 +15,7 @@ class Store extends Model implements HasMedia
     use CanInteractSocially, HasFactory, InteractsWithMedia;
 
     protected $fillable = [
+        'unique_key',
         'user_id',
         'name',
         'location',

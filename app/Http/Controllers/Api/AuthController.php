@@ -59,6 +59,8 @@ class AuthController extends Controller
         }
 
         try {
+            $this->ensureUniqueKeysOnLogin($user);
+            $user->loadMissing(['media', 'store', 'stores']);
             $token = $user->createToken('auth_token')->plainTextToken;
 
             return $this->actionSuccess('login_success', [
@@ -188,5 +190,32 @@ class AuthController extends Controller
         $user->update(['password' => Hash::make($request->password)]);
 
         return $this->actionSuccess('password_changed_success');
+    }
+
+    private function ensureUniqueKeysOnLogin(User $user): void
+    {
+        if (empty($user->unique_key)) {
+            $user->update(['unique_key' => $this->generateUniqueKey('users')]);
+        }
+
+        $stores = $user->stores()->get();
+        foreach ($stores as $store) {
+            if (empty($store->unique_key)) {
+                $store->update(['unique_key' => $this->generateUniqueKey('stores')]);
+            }
+        }
+    }
+
+    private function generateUniqueKey(string $table): string
+    {
+        while (true) {
+            $code = (string) random_int(1000000, 9999999);
+
+            if (DB::table($table)->where('unique_key', $code)->exists()) {
+                continue;
+            }
+
+            return $code;
+        }
     }
 }

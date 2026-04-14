@@ -41,6 +41,7 @@ Route::post('/app-settings', [AppSettingController::class, 'updateAppSettings'])
 Route::get('/search-suggestions', [SearchSuggestionController::class, 'index']);
 Route::get('get/listing/{id}', [ListingController::class, 'show']);
 Route::get('/store', [StoreController::class, 'show']);
+Route::get('/public-profile', [ContactController::class, 'getPublicProfileByUniqueId']);
 Route::post('/send-notification-test', [StoreFollowController::class, 'sendNotificationTest']);
 
 Route::middleware(['auth:sanctum'])->group(function () {
