@@ -180,6 +180,41 @@ class FriendRequestController extends Controller
     }
 
     /**
+     * Remove an accepted user↔user friendship (either user may call). Pending send/respond flow is unchanged.
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function removeFriend(Request $request)
+    {
+        $request->validate([
+            'friend_id' => 'required|integer|exists:users,id',
+        ]);
+
+        $friendId = (int) $request->input('friend_id');
+        $authId = (int) auth()->id();
+
+        if ($friendId === $authId) {
+            return $this->actionFailure('You cannot remove friendship with yourself', null, 400);
+        }
+
+        try {
+            $deleted = $this->friendRequestRepository->removeFriendshipWithUser($authId, $friendId);
+
+            $userIds = array_values(array_unique([$authId, $friendId]));
+            broadcast(new UserSocialRefresh($userIds, 'friend_removed'));
+            SocketIoEmitter::emitToUserIds($userIds, 'user.social.refresh', ['reason' => 'friend_removed']);
+
+            return $this->actionSuccess('Friend removed successfully', [
+                'removed_rows' => $deleted,
+            ]);
+        } catch (ApiOperationFailedException $e) {
+            return $this->actionFailure($e->getMessage(), null, $e->getCode() ?: 400);
+        } catch (\Exception $e) {
+            return $this->serverError($e->getMessage());
+        }
+    }
+
+    /**
      * Push lightweight inbox refresh so Contacts / Sent / Received lists update without full reload.
      */
     private function broadcastSocialRefreshForFriendRequest(FriendRequest $friendRequest): void

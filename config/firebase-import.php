@@ -4,6 +4,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Service account (live Firestore export)
+    |--------------------------------------------------------------------------
+    |
+    | Used by fullmarket:scrab to call the Firestore REST API. Path is relative
+    | to the application base path unless absolute. project_id is read from JSON
+    | (live project matches FullMarket Web: fullmarket-2082e).
+    |
+    */
+    'service_account_path' => env('FIREBASE_SERVICE_ACCOUNT', 'firebase_service_account.json'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Firestore JSON export root
     |--------------------------------------------------------------------------
     |

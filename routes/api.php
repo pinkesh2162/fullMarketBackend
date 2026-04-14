@@ -93,6 +93,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/chat/conversations', [ChatController::class, 'listConversations']);
     Route::get('/chat/conversations/{id}/messages', [ChatController::class, 'getMessages']);
     Route::post('/chat/messages/send', [ChatController::class, 'sendMessage']);
+    Route::post('/chat/messages/{id}/delete', [ChatController::class, 'deleteMessage']);
     Route::get('/chat/unread-count', [ChatController::class, 'getUnreadCount']);
     Route::get('/chat/tab-count', [ChatController::class, 'getChatTabCounts']);
 
@@ -116,4 +117,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // sdi notificaiton db store and fireabe notificaiton
     // cancel
     Route::delete('/friend-requests/{id}/cancel', [FriendRequestController::class, 'cancelRequest']);
+    // remove accepted user↔user friendship (either side)
+    Route::post('/friend-requests/remove', [FriendRequestController::class, 'removeFriend']);
 });

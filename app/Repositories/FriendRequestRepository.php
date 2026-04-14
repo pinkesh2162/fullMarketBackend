@@ -357,6 +357,44 @@ class FriendRequestRepository extends BaseRepository
     }
 
     /**
+     * End an accepted user↔user friendship (both directions). Deletes matching `friend_requests` rows
+     * so send/respond can run again for this pair.
+     *
+     * @throws ApiOperationFailedException
+     */
+    public function removeFriendshipWithUser(int $authUserId, int $friendUserId): int
+    {
+        try {
+            if ($authUserId === $friendUserId) {
+                throw new ApiOperationFailedException('Invalid friend', 400);
+            }
+
+            $deleted = FriendRequest::query()
+                ->where('status', 'accepted')
+                ->where('sender_type', 'user')
+                ->where('receiver_type', 'user')
+                ->where(function ($q) use ($authUserId, $friendUserId) {
+                    $q->where(function ($q) use ($authUserId, $friendUserId) {
+                        $q->where('sender_id', $authUserId)->where('receiver_id', $friendUserId);
+                    })->orWhere(function ($q) use ($authUserId, $friendUserId) {
+                        $q->where('sender_id', $friendUserId)->where('receiver_id', $authUserId);
+                    });
+                })
+                ->delete();
+
+            if ($deleted === 0) {
+                throw new ApiOperationFailedException('No friendship found with this user', 404);
+            }
+
+            return (int) $deleted;
+        } catch (ApiOperationFailedException $e) {
+            throw $e;
+        } catch (Exception $ex) {
+            throw new ApiOperationFailedException($ex->getMessage(), (int) $ex->getCode());
+        }
+    }
+
+    /**
      * So people can DM as users after a user↔store (or store↔store) connection, per product rules.
      */
     private function ensureUserUserBridgeForAcceptedMorphRequest(FriendRequest $fr): void

@@ -128,7 +128,6 @@ class ContactController extends Controller
 
         try {
             $type = $request->type ?? 'user';
-            $typeClass = \Illuminate\Database\Eloquent\Relations\Relation::getMorphedModel($type);
 
             $blockerId = $request->blocker_id ?? auth()->id();
             $blockerType = $request->blocker_type ?? 'user';
@@ -148,9 +147,13 @@ class ContactController extends Controller
                 return $this->actionFailure('Unauthorized store access', null, 403);
             }
 
+            /**
+             * Store morph **aliases** (`user` / `store`), matching {@see Model::getMorphClass()} and
+             * {@see CanInteractSocially::hasBlocked()} — not the concrete class name.
+             */
             $blocker->blockedEntities()->updateOrCreate([
                 'blocked_id' => $id,
-                'blocked_type' => $typeClass,
+                'blocked_type' => $type,
             ]);
 
             return $this->actionSuccess('Entity blocked successfully');
@@ -172,7 +175,6 @@ class ContactController extends Controller
 
         try {
             $type = $request->type ?? 'user';
-            $typeClass = \Illuminate\Database\Eloquent\Relations\Relation::getMorphedModel($type);
 
             $blockerId = $request->blocker_id ?? auth()->id();
             $blockerType = $request->blocker_type ?? 'user';
@@ -190,7 +192,7 @@ class ContactController extends Controller
 
             $blocker->blockedEntities()
                 ->where('blocked_id', $id)
-                ->where('blocked_type', $typeClass)
+                ->where('blocked_type', $type)
                 ->delete();
 
             return $this->actionSuccess('Entity unblocked successfully');
@@ -222,8 +224,7 @@ class ContactController extends Controller
         $query = $blocker->blockedEntities()->with('blocked');
 
         if ($type) {
-            $typeClass = \Illuminate\Database\Eloquent\Relations\Relation::getMorphedModel($type);
-            $query->where('blocked_type', $typeClass);
+            $query->where('blocked_type', $type);
         }
 
         $blockedEntities = $query->get();

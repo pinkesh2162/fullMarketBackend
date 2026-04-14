@@ -7,6 +7,7 @@ use App\Models\Conversation;
 use App\Models\ConversationParticipant;
 use App\Models\FriendRequest;
 use App\Models\Message;
+use App\Models\MessageParticipantHide;
 use App\Models\Store;
 use App\Models\User;
 use Exception;
@@ -54,7 +55,7 @@ class ChatRepository extends BaseRepository
                         ->where('participant_type', 'store');
                 });
             })
-                ->with(['participants.participant', 'lastMessage'])
+                ->with(['participants.participant'])
                 ->orderBy('updated_at', 'desc')
                 ->get()
                 ->map(function ($conversation) use ($user, $storeIds) {
@@ -77,11 +78,7 @@ class ChatRepository extends BaseRepository
                             'type' => $me->participant_type,
                             'name' => $me->participant->social_name,
                         ],
-                        'last_message' => $conversation->lastMessage ? [
-                            'body' => $conversation->lastMessage->body,
-                            'type' => $conversation->lastMessage->type,
-                            'created_at' => $conversation->lastMessage->created_at->toIso8601String(),
-                        ] : null,
+                        'last_message' => $this->lastVisibleMessagePayload($conversation, $me),
                         'unread_count' => $me->unread_count,
                         'updated_at' => $conversation->updated_at->toIso8601String(),
                     ];
@@ -124,6 +121,7 @@ class ChatRepository extends BaseRepository
             }
 
             return $conversation->messages()
+                ->visibleForParticipant((int) $me->participant_id, (string) $me->participant_type)
                 ->with('sender')
                 ->orderBy('created_at', 'desc')
                 ->paginate(30);
@@ -180,19 +178,21 @@ class ChatRepository extends BaseRepository
 
                 $messages = collect();
 
-                // 1. Handle text body
-                if (! empty($data['body'])) {
+                // 1. Handle text body (optional when media-only)
+                $body = isset($data['body']) ? trim((string) $data['body']) : '';
+                if ($body !== '') {
                     $messages->push(Message::create([
                         'conversation_id' => $conversation->id,
                         'sender_id' => $data['sender_id'],
                         'sender_type' => $senderType,
-                        'body' => $data['body'],
+                        'body' => $body,
                         'type' => 'text',
                     ]));
                 }
 
                 // 2. Handle legacy single media
-                if (isset($data['media']) && $data['media'] instanceof \Illuminate\Http\UploadedFile) {
+                $legacyMedia = $data['media'] ?? null;
+                if ($legacyMedia instanceof \Illuminate\Http\UploadedFile) {
                     $type = $data['type'] ?? 'image';
                     $msg = Message::create([
                         'conversation_id' => $conversation->id,
@@ -200,11 +200,11 @@ class ChatRepository extends BaseRepository
                         'sender_type' => $senderType,
                         'type' => $type,
                     ]);
-                    $msg->addMedia($data['media'])->toMediaCollection('chat_media');
+                    $msg->addMedia($legacyMedia)->toMediaCollection('chat_media');
                     $messages->push($msg);
                 }
 
-                // 3. Handle media arrays
+                // 3. Handle media groups (single file or array — clients often send one file without a true PHP array)
                 $mediaGroups = [
                     'images' => 'image',
                     'videos' => 'video',
@@ -213,21 +213,20 @@ class ChatRepository extends BaseRepository
                 ];
 
                 foreach ($mediaGroups as $key => $type) {
-                    if (! empty($data[$key]) && is_array($data[$key])) {
-                        // Create one message record per group (e.g. all 12 images in one message)
-                        $msg = Message::create([
-                            'conversation_id' => $conversation->id,
-                            'sender_id' => $data['sender_id'],
-                            'sender_type' => $senderType,
-                            'type' => $type,
-                        ]);
-                        foreach ($data[$key] as $file) {
-                            if ($file instanceof \Illuminate\Http\UploadedFile) {
-                                $msg->addMedia($file)->toMediaCollection('chat_media');
-                            }
-                        }
-                        $messages->push($msg);
+                    $files = $this->normalizeUploadedFiles($data[$key] ?? null);
+                    if ($files === []) {
+                        continue;
                     }
+                    $msg = Message::create([
+                        'conversation_id' => $conversation->id,
+                        'sender_id' => $data['sender_id'],
+                        'sender_type' => $senderType,
+                        'type' => $type,
+                    ]);
+                    foreach ($files as $file) {
+                        $msg->addMedia($file)->toMediaCollection('chat_media');
+                    }
+                    $messages->push($msg);
                 }
 
                 if ($messages->isEmpty()) {
@@ -275,6 +274,135 @@ class ChatRepository extends BaseRepository
         } catch (Exception $ex) {
             throw new ApiOperationFailedException($ex->getMessage(), (int) $ex->getCode());
         }
+    }
+
+    /**
+     * @param  'for_me'|'for_everyone'  $scope
+     * @return array{conversation_id: int, message_id: int, deleted_for_everyone: bool}
+     *
+     * @throws ApiOperationFailedException
+     */
+    public function deleteMessage(int $messageId, string $scope, int $actorId, string $actorType): array
+    {
+        try {
+            $actorType = strtolower($actorType) === 'store' ? 'store' : 'user';
+
+            /** @var User $auth */
+            $auth = Auth::user();
+            if (! $auth) {
+                throw new ApiOperationFailedException('Unauthenticated', 401);
+            }
+
+            $this->assertSenderIdentityAllowed($auth, $actorId, $actorType);
+
+            /** @var Message|null $message */
+            $message = Message::query()->find($messageId);
+            if (! $message) {
+                throw new ApiOperationFailedException('Message not found', 404);
+            }
+
+            $conversation = Conversation::find($message->conversation_id);
+            if (! $conversation) {
+                throw new ApiOperationFailedException('Conversation not found', 404);
+            }
+
+            $me = $conversation->participants()
+                ->where(function ($q) use ($actorId, $actorType) {
+                    $q->where('participant_id', $actorId)->where('participant_type', $actorType);
+                })->first();
+
+            if (! $me) {
+                throw new ApiOperationFailedException('You are not a participant in this conversation', 403);
+            }
+
+            if ($scope === 'for_me') {
+                MessageParticipantHide::firstOrCreate([
+                    'message_id' => $message->id,
+                    'participant_id' => $me->participant_id,
+                    'participant_type' => $me->participant_type,
+                ]);
+
+                return [
+                    'conversation_id' => (int) $conversation->id,
+                    'message_id' => (int) $message->id,
+                    'deleted_for_everyone' => false,
+                ];
+            }
+
+            if ($scope !== 'for_everyone') {
+                throw new ApiOperationFailedException('Invalid delete scope', 400);
+            }
+
+            if ((int) $message->sender_id !== $actorId || (string) $message->sender_type !== $actorType) {
+                throw new ApiOperationFailedException('Only the sender can delete this message for everyone', 403);
+            }
+
+            $cid = (int) $message->conversation_id;
+            $mid = (int) $message->id;
+
+            $message->delete();
+            $this->refreshConversationLastMessage($conversation);
+
+            return [
+                'conversation_id' => $cid,
+                'message_id' => $mid,
+                'deleted_for_everyone' => true,
+            ];
+        } catch (ApiOperationFailedException $e) {
+            throw $e;
+        } catch (Exception $ex) {
+            throw new ApiOperationFailedException($ex->getMessage(), (int) $ex->getCode());
+        }
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function lastVisibleMessagePayload(Conversation $conversation, ConversationParticipant $me): ?array
+    {
+        $last = Message::query()
+            ->where('conversation_id', $conversation->id)
+            ->visibleForParticipant((int) $me->participant_id, (string) $me->participant_type)
+            ->orderByDesc('created_at')
+            ->first();
+
+        if (! $last) {
+            return null;
+        }
+
+        return [
+            'body' => $last->body,
+            'type' => $last->type,
+            'created_at' => $last->created_at->toIso8601String(),
+        ];
+    }
+
+    private function refreshConversationLastMessage(Conversation $conversation): void
+    {
+        $last = Message::query()
+            ->where('conversation_id', $conversation->id)
+            ->orderByDesc('created_at')
+            ->first();
+
+        $conversation->update([
+            'last_message_id' => $last?->id,
+            'last_message_at' => $last?->created_at ?? $conversation->last_message_at,
+        ]);
+    }
+
+    /**
+     * @return list<\Illuminate\Http\UploadedFile>
+     */
+    private function normalizeUploadedFiles(mixed $value): array
+    {
+        if ($value instanceof \Illuminate\Http\UploadedFile) {
+            return $value->isValid() ? [$value] : [];
+        }
+        if (! is_array($value)) {
+            return [];
+        }
+
+        return array_values(array_filter($value, fn ($f) => $f instanceof \Illuminate\Http\UploadedFile && $f->isValid()));
     }
 
     private function assertSenderIdentityAllowed(User $auth, int $senderId, string $senderType): void

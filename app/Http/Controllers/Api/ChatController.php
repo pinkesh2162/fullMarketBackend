@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\MessageDeleted;
 use App\Events\MessageSent;
 use App\Events\UserSocialRefresh;
 use App\Http\Controllers\Controller;
@@ -12,6 +13,8 @@ use App\Repositories\ContactRepository;
 use App\Repositories\FriendRequestRepository;
 use App\Services\SocketIoEmitter;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Validator;
 
 class ChatController extends Controller
 {
@@ -74,15 +77,13 @@ class ChatController extends Controller
             'body' => 'nullable|string',
             'type' => 'nullable|in:text,image,video,audio,document',
             'media' => 'nullable|file',
-            'images' => 'nullable|array',
-            'images.*' => 'file|image',
-            'videos' => 'nullable|array',
-            'videos.*' => 'file|mimes:mp4,mov,avi,wmv',
-            'audios' => 'nullable|array',
-            'audios.*' => 'file|mimes:mp3,wav,aac,m4a',
-            'documents' => 'nullable|array',
-            'documents.*' => 'file|mimes:pdf,doc,docx,xls,xlsx,txt',
+            'images' => 'nullable',
+            'videos' => 'nullable',
+            'audios' => 'nullable',
+            'documents' => 'nullable',
         ]);
+
+        $this->validateChatMediaFiles($request);
 
         try {
             $messages = $this->chatRepository->sendMessage($request->all());
@@ -123,6 +124,57 @@ class ChatController extends Controller
     }
 
     /**
+     * Delete a chat message for the current participant only, or for all participants (sender only).
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function deleteMessage(Request $request, $id)
+    {
+        $request->validate([
+            'scope' => 'required|in:for_me,for_everyone',
+            'actor_id' => 'nullable|numeric',
+            'actor_type' => 'nullable|in:User,Store',
+        ]);
+
+        $actorId = (int) ($request->input('actor_id') ?? auth()->id());
+        $actorTypeRaw = $request->input('actor_type', 'User');
+        $actorType = strtolower((string) $actorTypeRaw) === 'store' ? 'store' : 'user';
+
+        try {
+            $result = $this->chatRepository->deleteMessage(
+                (int) $id,
+                (string) $request->input('scope'),
+                $actorId,
+                $actorType
+            );
+
+            if ($result['deleted_for_everyone']) {
+                broadcast(new MessageDeleted(
+                    $result['message_id'],
+                    $result['conversation_id'],
+                    'for_everyone'
+                ));
+                SocketIoEmitter::emitMessageDeleted(
+                    $result['message_id'],
+                    $result['conversation_id'],
+                    'for_everyone'
+                );
+            }
+
+            return $this->actionSuccess(
+                $result['deleted_for_everyone']
+                    ? 'Message deleted for everyone'
+                    : 'Message deleted for you',
+                $result
+            );
+        } catch (\App\Exceptions\ApiOperationFailedException $e) {
+            return $this->actionFailure($e->getMessage(), null, $e->getCode() ?: 400);
+        } catch (\Exception $e) {
+            return $this->serverError($e->getMessage());
+        }
+    }
+
+    /**
      * @return \Illuminate\Http\JsonResponse
      *
      * @throws \App\Exceptions\ApiOperationFailedException
@@ -156,5 +208,35 @@ class ChatController extends Controller
             'friend_requests_sent' => $sent,
             'all_counts' => (int) $unread + (int) $contacts + (int) $received + (int) $sent,
         ]);
+    }
+
+    /**
+     * Multipart may send a single file (not wrapped in an array) for keys like images[] — validate each file.
+     */
+    private function validateChatMediaFiles(Request $request): void
+    {
+        $perKeyRules = [
+            'images' => ['file', 'image'],
+            'videos' => ['file', 'mimes:mp4,mov,avi,wmv'],
+            'audios' => ['file', 'mimes:mp3,wav,aac,m4a'],
+            'documents' => ['file', 'mimes:pdf,doc,docx,xls,xlsx,txt'],
+        ];
+
+        foreach ($perKeyRules as $key => $rules) {
+            $raw = $request->file($key);
+            if ($raw === null) {
+                continue;
+            }
+            $files = $raw instanceof UploadedFile ? [$raw] : (is_array($raw) ? $raw : []);
+            foreach ($files as $i => $file) {
+                if (! $file instanceof UploadedFile) {
+                    continue;
+                }
+                Validator::make(
+                    [$key.'_'.$i => $file],
+                    [$key.'_'.$i => $rules]
+                )->validate();
+            }
+        }
     }
 }

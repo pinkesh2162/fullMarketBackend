@@ -37,7 +37,11 @@ class ContactRepository extends BaseRepository
     {
         try {
             if (! $entity instanceof User) {
-                return $entity->friends();
+                return collect($entity->friends())
+                    ->filter(function ($friend) use ($entity) {
+                        return ! $entity->hasBlocked($friend) && ! $entity->isBlockedBy($friend);
+                    })
+                    ->values();
             }
 
             /** @var User $user */
@@ -60,10 +64,12 @@ class ContactRepository extends BaseRepository
             /** Never list the viewer's own store(s) as if they were an external contact. */
             $merged = $merged->filter(function ($friend) use ($user) {
                 if ($friend instanceof Store) {
-                    return (int) $friend->user_id !== (int) $user->id;
+                    if ((int) $friend->user_id === (int) $user->id) {
+                        return false;
+                    }
                 }
 
-                return true;
+                return ! $user->hasBlocked($friend) && ! $user->isBlockedBy($friend);
             });
 
             /**

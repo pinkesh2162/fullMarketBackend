@@ -41,17 +41,33 @@ trait CanInteractSocially
 
     public function hasBlocked($entity): bool
     {
+        $morph = $entity->getMorphClass();
+        $class = get_class($entity);
+
         return $this->blockedEntities()
             ->where('blocked_id', $entity->id)
-            ->where('blocked_type', $entity->getMorphClass())
+            ->where(function ($q) use ($morph, $class) {
+                $q->where('blocked_type', $morph);
+                if ($class !== $morph) {
+                    $q->orWhere('blocked_type', $class);
+                }
+            })
             ->exists();
     }
 
     public function isBlockedBy($entity): bool
     {
+        $morph = $entity->getMorphClass();
+        $class = get_class($entity);
+
         return $this->blockedByEntities()
             ->where('blocker_id', $entity->id)
-            ->where('blocker_type', $entity->getMorphClass())
+            ->where(function ($q) use ($morph, $class) {
+                $q->where('blocker_type', $morph);
+                if ($class !== $morph) {
+                    $q->orWhere('blocker_type', $class);
+                }
+            })
             ->exists();
     }
 
