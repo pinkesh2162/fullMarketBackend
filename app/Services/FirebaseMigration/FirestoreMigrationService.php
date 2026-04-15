@@ -462,7 +462,7 @@ class FirestoreMigrationService
         $created = FirestoreDataNormalizer::parseTimestamp($d['createdAt'] ?? $d['createdat'] ?? null);
         $updated = FirestoreDataNormalizer::parseTimestamp($d['updatedAt'] ?? $d['updatedat'] ?? null);
         $emailVerifiedAt = $verified ? ($created ?? $updated) : null;
-        [$provider, $providerId] = $this->providerFromFirebaseUserId($firebaseUid);
+        [$provider, $providerId] = $this->providerFromFirebaseUser($firebaseUid, $d);
 
         return [
             'first_name' => Str::limit((string) $first, 255, ''),
@@ -504,12 +504,21 @@ class FirestoreMigrationService
     /**
      * @return array{0:string,1:string}
      */
-    protected function providerFromFirebaseUserId(string $firebaseUid): array
+    protected function providerFromFirebaseUser(string $firebaseUid, array $data): array
     {
         $uid = trim($firebaseUid);
         if (str_starts_with($uid, 'users/')) {
             $uid = substr($uid, 6);
         }
+
+        $providerHint = FirestoreDataNormalizer::trimString(
+            $data['provider']
+            ?? $data['provider_name']
+            ?? $data['authProvider']
+            ?? $data['signInProvider']
+            ?? null
+        );
+
         if (str_contains($uid, '|')) {
             [$rawProvider, $providerId] = array_pad(explode('|', $uid, 2), 2, '');
             $provider = strtolower(trim($rawProvider));
@@ -520,6 +529,26 @@ class FirestoreMigrationService
             }
 
             return [$provider !== '' ? $provider : 'firebase', trim($providerId) !== '' ? trim($providerId) : $uid];
+        }
+
+        if ($providerHint !== null) {
+            $provider = strtolower(trim($providerHint));
+            if (str_contains($provider, 'google')) {
+                $provider = 'google';
+            } elseif (str_contains($provider, 'apple')) {
+                $provider = 'apple';
+            } elseif ($provider === 'password') {
+                $provider = 'firebase';
+            }
+
+            $providerId = FirestoreDataNormalizer::trimString(
+                $data['provider_id']
+                ?? $data['providerId']
+                ?? $data['oauth_id']
+                ?? null
+            );
+
+            return [$provider !== '' ? $provider : 'firebase', $providerId !== null ? $providerId : $uid];
         }
 
         return ['firebase', $uid];
@@ -703,7 +732,7 @@ class FirestoreMigrationService
 
             $userId = $this->state->getUserId($ownerUid);
             if ($userId === null) {
-                $userId = User::query()->where('provider', 'firebase')->where('provider_id', $ownerUid)->value('id');
+                $userId = User::query()->where('provider_id', $ownerUid)->value('id');
             }
             if ($userId === null) {
                 $this->logger->skip('store', 'user_not_found', ['firebase_doc' => $fbDocId, 'owner' => $ownerUid]);
@@ -1006,7 +1035,7 @@ class FirestoreMigrationService
 
             $userId = $this->state->getUserId($ownerUid);
             if ($userId === null) {
-                $userId = User::query()->where('provider', 'firebase')->where('provider_id', $ownerUid)->value('id');
+                $userId = User::query()->where('provider_id', $ownerUid)->value('id');
             }
             if ($userId === null) {
                 $this->logger->skip('listing', 'user_not_found', ['firebase_doc' => $fbId, 'owner' => $ownerUid]);
