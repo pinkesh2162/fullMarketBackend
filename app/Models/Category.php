@@ -56,9 +56,13 @@ class Category extends Model implements HasMedia
     }
 
     /**
-     * Custom user categories → one default PNG. System categories → config map (per name,
-     * including each subcategory) before seeded SVG media so listings show distinct raster icons.
-     * If no map entry: uploaded media, then parent map, then global default.
+     * Image resolution priority:
+     * 1) Imported/uploaded media (Firebase/Spatie) for this category
+     * 2) Name-based custom map
+     * 3) Parent name-based custom map
+     * 4) Global default image
+     *
+     * Custom user categories still use custom fallback image.
      */
     public function getCategoryImageAttribute(): string
     {
@@ -71,16 +75,12 @@ class Category extends Model implements HasMedia
         $key = $this->normalizedCategoryNameKey((string) $this->name);
 
         $media = $this->getMedia(self::CATEGORY_IMAGE)->first();
-        if ($media !== null && $media->mime_type !== 'image/svg+xml') {
+        if ($media !== null) {
             return $media->getFullUrl();
         }
 
         if (isset($map[$key])) {
             return $storage->resolveUrl($key, $map[$key]);
-        }
-
-        if ($media !== null) {
-            return $media->getFullUrl();
         }
 
         if ($this->parent_id) {
