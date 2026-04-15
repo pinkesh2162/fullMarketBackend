@@ -332,51 +332,74 @@ class FirestoreMigrationService
             }
 
             try {
+                $payload = $this->buildUserPayload($d, $fbUid, $email);
+
                 $existing = User::query()->whereRaw('LOWER(email) = ?', [$email])->first();
                 if ($existing !== null) {
+                    $existing->mergeCasts(['password' => 'string']);
+                    $existing->fill([
+                        'first_name' => $payload['first_name'],
+                        'last_name' => $payload['last_name'],
+                        'email' => $email,
+                        'password' => $this->passwordHash(),
+                        'phone' => $payload['phone'],
+                        'phone_code' => $payload['phone_code'],
+                        'location' => $payload['location'],
+                        'description' => $payload['description'],
+                        'lang' => $payload['lang'],
+                        'currency' => $payload['currency'],
+                        'email_verified_at' => $payload['email_verified_at'],
+                        'provider' => $payload['provider'],
+                        'provider_id' => $payload['provider_id'],
+                        'fcm_token' => $payload['fcm_token'],
+                    ]);
+                    $existing->save();
+
+                    if ($payload['created_at'] || $payload['updated_at']) {
+                        DB::table('users')->where('id', $existing->id)->update(array_filter([
+                            'created_at' => $payload['created_at'],
+                            'updated_at' => $payload['updated_at'] ?? $payload['created_at'],
+                        ]));
+                    }
+
+                    if (! $skipMedia) {
+                        $photo = $this->userProfilePhotoUrl($d);
+                        if ($photo !== null && $existing->getMedia(User::PROFILE)->isEmpty()) {
+                            $this->mediaHelper->attachFromUrl($existing, $photo, User::PROFILE, $this->disk());
+                        }
+                    }
+
                     $this->state->setUserId($fbUid, (int) $existing->id);
                     $this->state->save();
                     $this->syncUserSettings((int) $existing->id, $d, $dryRun);
-                    $skip++;
+                    $ok++;
                     continue;
                 }
-
-                $prefs = is_array($d['preferences'] ?? null) ? $d['preferences'] : [];
-                $phone = FirestoreDataNormalizer::trimString($d['phonenumber'] ?? $d['phone'] ?? $d['phoneNumber'] ?? null);
-                $location = $this->userLocationFromLocations($d['locations'] ?? null);
-                $locationJson = $location !== null ? json_encode($location, JSON_UNESCAPED_UNICODE) : null;
-                $bio = FirestoreDataNormalizer::truncateUtf8(FirestoreDataNormalizer::trimString($d['bio'] ?? $d['description'] ?? null));
-                $lang = FirestoreDataNormalizer::trimString($prefs['language'] ?? $d['lang'] ?? null) ?? 'en';
-                $currency = FirestoreDataNormalizer::trimString($prefs['currency'] ?? null);
-
-                $verified = FirestoreDataNormalizer::truthy($d['email_verified'] ?? $d['emailVerified'] ?? null);
-                $created = FirestoreDataNormalizer::parseTimestamp($d['createdAt'] ?? $d['createdat'] ?? null);
-                $updated = FirestoreDataNormalizer::parseTimestamp($d['updatedAt'] ?? $d['updatedat'] ?? null);
-                $emailVerifiedAt = $verified ? ($created ?? $updated) : null;
 
                 $user = new User;
                 $user->mergeCasts(['password' => 'string']);
                 $user->fill([
-                    'first_name' => Str::limit($first, 255, ''),
-                    'last_name' => $last !== null ? Str::limit($last, 255, '') : null,
+                    'first_name' => $payload['first_name'],
+                    'last_name' => $payload['last_name'],
                     'email' => $email,
                     'password' => $this->passwordHash(),
-                    'phone' => $phone !== null ? Str::limit($phone, 255, '') : null,
-                    'location' => $locationJson,
-                    'description' => $bio,
-                    'lang' => Str::limit($lang, 16, ''),
-                    'currency' => $currency !== null ? Str::limit($currency, 16, '') : null,
-                    'email_verified_at' => $emailVerifiedAt,
-                    'provider' => 'firebase',
-                    'provider_id' => $fbUid,
-                    'fcm_token' => FirestoreDataNormalizer::trimString($d['fcmtoken'] ?? $d['fcmToken'] ?? null),
+                    'phone' => $payload['phone'],
+                    'phone_code' => $payload['phone_code'],
+                    'location' => $payload['location'],
+                    'description' => $payload['description'],
+                    'lang' => $payload['lang'],
+                    'currency' => $payload['currency'],
+                    'email_verified_at' => $payload['email_verified_at'],
+                    'provider' => $payload['provider'],
+                    'provider_id' => $payload['provider_id'],
+                    'fcm_token' => $payload['fcm_token'],
                 ]);
                 $user->save();
 
-                if ($created || $updated) {
+                if ($payload['created_at'] || $payload['updated_at']) {
                     DB::table('users')->where('id', $user->id)->update(array_filter([
-                        'created_at' => $created,
-                        'updated_at' => $updated ?? $created,
+                        'created_at' => $payload['created_at'],
+                        'updated_at' => $payload['updated_at'] ?? $payload['created_at'],
                     ]));
                 }
 
@@ -401,6 +424,105 @@ class FirestoreMigrationService
         $line("Users: ok={$ok} skip={$skip} err={$err}");
 
         return ['ok' => $ok, 'skip' => $skip, 'err' => $err];
+    }
+
+    /**
+     * @param  array<string, mixed>  $d
+     * @return array{
+     *   first_name:string,
+     *   last_name:?string,
+     *   phone:?string,
+     *   phone_code:?string,
+     *   location:?string,
+     *   description:?string,
+     *   lang:string,
+     *   currency:?string,
+     *   email_verified_at:?\Illuminate\Support\Carbon,
+     *   provider:string,
+     *   provider_id:string,
+     *   fcm_token:?string,
+     *   created_at:?\Illuminate\Support\Carbon,
+     *   updated_at:?\Illuminate\Support\Carbon
+     * }
+     */
+    protected function buildUserPayload(array $d, string $firebaseUid, string $email): array
+    {
+        [$first, $last] = $this->resolveUserNames($d, $email);
+        $prefs = is_array($d['preferences'] ?? null) ? $d['preferences'] : [];
+        $phone = FirestoreDataNormalizer::trimString($d['phonenumber'] ?? $d['phone'] ?? $d['phoneNumber'] ?? $d['phone_national'] ?? null);
+        $phoneCode = FirestoreDataNormalizer::trimString($d['phone_country_code'] ?? $d['phoneCode'] ?? null);
+        $location = $this->userLocationPayload($d);
+        $locationJson = $location !== null ? json_encode($location, JSON_UNESCAPED_UNICODE) : null;
+        $description = FirestoreDataNormalizer::truncateUtf8(
+            FirestoreDataNormalizer::trimString($d['description'] ?? $d['bio'] ?? null)
+        );
+        $lang = FirestoreDataNormalizer::trimString($prefs['language'] ?? $d['lang'] ?? null) ?? 'en';
+        $currency = FirestoreDataNormalizer::trimString($prefs['currency'] ?? null);
+        $verified = FirestoreDataNormalizer::truthy($d['email_verified'] ?? $d['emailVerified'] ?? null);
+        $created = FirestoreDataNormalizer::parseTimestamp($d['createdAt'] ?? $d['createdat'] ?? null);
+        $updated = FirestoreDataNormalizer::parseTimestamp($d['updatedAt'] ?? $d['updatedat'] ?? null);
+        $emailVerifiedAt = $verified ? ($created ?? $updated) : null;
+        [$provider, $providerId] = $this->providerFromFirebaseUserId($firebaseUid);
+
+        return [
+            'first_name' => Str::limit((string) $first, 255, ''),
+            'last_name' => $last !== null ? Str::limit($last, 255, '') : null,
+            'phone' => $phone !== null ? Str::limit($phone, 255, '') : null,
+            'phone_code' => $phoneCode !== null ? Str::limit($phoneCode, 32, '') : null,
+            'location' => $locationJson,
+            'description' => $description,
+            'lang' => Str::limit($lang, 16, ''),
+            'currency' => $currency !== null ? Str::limit($currency, 16, '') : null,
+            'email_verified_at' => $emailVerifiedAt,
+            'provider' => $provider,
+            'provider_id' => $providerId,
+            'fcm_token' => FirestoreDataNormalizer::trimString($d['fcmtoken'] ?? $d['fcmToken'] ?? null),
+            'created_at' => $created,
+            'updated_at' => $updated ?? $created,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $d
+     * @return array<string, mixed>|null
+     */
+    protected function userLocationPayload(array $d): ?array
+    {
+        $fromLocations = $this->userLocationFromLocations($d['locations'] ?? null);
+        if ($fromLocations !== null) {
+            return $fromLocations;
+        }
+        return $this->normalizedLocationPayload(
+            $d,
+            ['address', 'location.address', 'location.name'],
+            ['lastKnownLatitude', 'latitude', 'location.lat', 'location.latitude'],
+            ['lastKnownLongitude', 'longitude', 'location.long', 'location.lng', 'location.longitude'],
+            ['place_id', 'location.place_id', 'location.id']
+        );
+    }
+
+    /**
+     * @return array{0:string,1:string}
+     */
+    protected function providerFromFirebaseUserId(string $firebaseUid): array
+    {
+        $uid = trim($firebaseUid);
+        if (str_starts_with($uid, 'users/')) {
+            $uid = substr($uid, 6);
+        }
+        if (str_contains($uid, '|')) {
+            [$rawProvider, $providerId] = array_pad(explode('|', $uid, 2), 2, '');
+            $provider = strtolower(trim($rawProvider));
+            if (str_contains($provider, 'google')) {
+                $provider = 'google';
+            } elseif (str_contains($provider, 'apple')) {
+                $provider = 'apple';
+            }
+
+            return [$provider !== '' ? $provider : 'firebase', trim($providerId) !== '' ? trim($providerId) : $uid];
+        }
+
+        return ['firebase', $uid];
     }
 
     /**
@@ -477,12 +599,13 @@ class FirestoreMigrationService
         if (! is_array($first)) {
             return null;
         }
-        $label = FirestoreDataNormalizer::trimString($first['description'] ?? $first['name'] ?? null);
-        if ($label === null) {
-            return null;
-        }
-
-        return ['label' => Str::limit($label, 500, '')];
+        return $this->normalizedLocationPayload(
+            $first,
+            ['description', 'name', 'address'],
+            ['latitude', 'lat'],
+            ['longitude', 'long', 'lng'],
+            ['place_id', 'id']
+        );
     }
 
     /**
@@ -705,12 +828,13 @@ class FirestoreMigrationService
             return null;
         }
 
-        return array_filter([
-            'id' => isset($loc['id']) ? (is_scalar($loc['id']) ? (string) $loc['id'] : null) : null,
-            'lat' => $loc['lat'] ?? $loc['latitude'] ?? null,
-            'lng' => $loc['lng'] ?? $loc['longitude'] ?? $loc['long'] ?? null,
-            'name' => FirestoreDataNormalizer::trimString($loc['name'] ?? $loc['address'] ?? null),
-        ], fn ($v) => $v !== null && $v !== '');
+        return $this->normalizedLocationPayload(
+            $loc,
+            ['address', 'name', 'description'],
+            ['lat', 'latitude'],
+            ['long', 'lng', 'longitude'],
+            ['place_id', 'id']
+        );
     }
 
     /**
@@ -1044,15 +1168,105 @@ class FirestoreMigrationService
                 }
             }
         }
-        if (! is_array($loc)) {
+        if (is_array($loc)) {
+            $fromLocation = $this->normalizedLocationPayload(
+                $loc,
+                ['address', 'name', 'description'],
+                ['lat', 'latitude'],
+                ['long', 'lng', 'longitude'],
+                ['place_id', 'id']
+            );
+            if ($fromLocation !== null) {
+                return $fromLocation;
+            }
+        }
+
+        return $this->normalizedLocationPayload(
+            $d,
+            ['address', 'location.address', 'location.name'],
+            ['latitude', 'lat', 'location.latitude', 'location.lat'],
+            ['longitude', 'long', 'lng', 'location.longitude', 'location.long', 'location.lng'],
+            ['place_id', 'location.place_id', 'geohash']
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $source
+     * @param  list<string>  $addressPaths
+     * @param  list<string>  $latPaths
+     * @param  list<string>  $longPaths
+     * @param  list<string>  $placeIdPaths
+     * @return array<string, mixed>|null
+     */
+    protected function normalizedLocationPayload(
+        array $source,
+        array $addressPaths,
+        array $latPaths,
+        array $longPaths,
+        array $placeIdPaths = []
+    ): ?array {
+        $address = $this->firstNonEmptyStringByPaths($source, $addressPaths);
+        $lat = $this->firstNumericOrStringByPaths($source, $latPaths);
+        $long = $this->firstNumericOrStringByPaths($source, $longPaths);
+        $placeId = $this->firstNonEmptyStringByPaths($source, $placeIdPaths);
+
+        if ($address === null && $lat === null && $long === null) {
             return null;
         }
 
-        return [
-            'address' => $loc['address'] ?? null,
-            'lat' => $loc['lat'] ?? $loc['latitude'] ?? null,
-            'long' => $loc['long'] ?? $loc['lng'] ?? $loc['longitude'] ?? null,
-        ];
+        return array_filter([
+            'lat' => $lat,
+            'long' => $long,
+            'address' => $address !== null ? Str::limit($address, 500, '') : null,
+            'place_id' => $placeId !== null ? Str::limit($placeId, 255, '') : null,
+        ], fn ($v) => $v !== null && $v !== '');
+    }
+
+    /**
+     * @param  array<string, mixed>  $source
+     * @param  list<string>  $paths
+     */
+    protected function firstNonEmptyStringByPaths(array $source, array $paths): ?string
+    {
+        foreach ($paths as $path) {
+            $value = data_get($source, $path);
+            if (is_string($value)) {
+                $trimmed = trim($value);
+                if ($trimmed !== '') {
+                    return $trimmed;
+                }
+            } elseif (is_numeric($value)) {
+                return (string) $value;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $source
+     * @param  list<string>  $paths
+     */
+    protected function firstNumericOrStringByPaths(array $source, array $paths): int|float|string|null
+    {
+        foreach ($paths as $path) {
+            $value = data_get($source, $path);
+            if (is_int($value) || is_float($value)) {
+                return $value;
+            }
+            if (is_string($value)) {
+                $trimmed = trim($value);
+                if ($trimmed !== '') {
+                    if (is_numeric($trimmed)) {
+                        return str_contains($trimmed, '.') ? (float) $trimmed : (int) $trimmed;
+                    }
+
+                    return $trimmed;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
