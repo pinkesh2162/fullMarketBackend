@@ -261,6 +261,24 @@ class FirestoreMigrationService
             if (is_string($v) && filter_var($v, FILTER_VALIDATE_URL)) {
                 return $v;
             }
+            if (is_array($v)) {
+                $u = $v['url'] ?? $v['src'] ?? null;
+                if (is_string($u) && filter_var($u, FILTER_VALIDATE_URL)) {
+                    return $u;
+                }
+            }
+            if (is_string($v)) {
+                $trimmed = trim($v);
+                if ($trimmed !== '') {
+                    return $trimmed;
+                }
+            }
+            if (is_array($v)) {
+                $u = $v['url'] ?? $v['src'] ?? null;
+                if (is_string($u) && trim($u) !== '') {
+                    return trim($u);
+                }
+            }
         }
         $g = $d['gallery'] ?? $d['images'] ?? null;
         if (is_array($g)) {
@@ -271,6 +289,9 @@ class FirestoreMigrationService
                 $u = $item['url'] ?? $item['src'] ?? null;
                 if (is_string($u) && filter_var($u, FILTER_VALIDATE_URL)) {
                     return $u;
+                }
+                if (is_string($u) && trim($u) !== '') {
+                    return trim($u);
                 }
             }
         }

@@ -47,10 +47,8 @@ class CategoryReferenceResolver
             if ($id === null) {
                 continue;
             }
-            $local = $this->state->getCategoryId($id);
-            if ($local !== null) {
-                return $local;
-            }
+            // Strict rule: use first non-empty source key only.
+            return $this->state->getCategoryId($id);
         }
 
         return null;
