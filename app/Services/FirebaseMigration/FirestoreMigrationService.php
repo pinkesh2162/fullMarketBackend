@@ -1087,7 +1087,9 @@ class FirestoreMigrationService
                 $serviceType = $this->mapServiceType($d);
                 $stats = is_array($d['stats'] ?? null) ? $d['stats'] : [];
                 $views = (int) ($stats['viewCount'] ?? $stats['viewcount'] ?? 0);
-                $availability = $this->isActiveStatus($d['status'] ?? null);
+                $availability = array_key_exists('availability', $d)
+                    ? FirestoreDataNormalizer::truthy($d['availability'])
+                    : $this->isActiveStatus($d['status'] ?? null);
                 $tags = $d['tags'] ?? [];
                 $search = '';
                 if (is_array($tags)) {
@@ -1115,8 +1117,8 @@ class FirestoreMigrationService
                     'condition' => FirestoreDataNormalizer::trimString($d['condition'] ?? null),
                     'listing_type' => $this->listingTypeFlags($d, $serviceType),
                     'property_type' => $this->propertyType($d, $serviceType),
-                    'bedrooms' => $this->strOrNull($d['bedrooms'] ?? null),
-                    'bathrooms' => $this->strOrNull($d['bathrooms'] ?? null),
+                    'bedrooms' => $this->strOrNull($d['bedrooms'] ?? data_get($d, 'custom_fields.bedrooms') ?? data_get($d, 'customFields.bedrooms')),
+                    'bathrooms' => $this->strOrNull($d['bathrooms'] ?? data_get($d, 'custom_fields.bathrooms') ?? data_get($d, 'customFields.bathrooms')),
                     'advance_options' => $this->propertyAdvance($d, $serviceType),
                     'vehicle_type' => $this->vehicleType($d, $serviceType),
                     'vehical_info' => $this->vehicleInfoJson($d, $serviceType),
@@ -1213,8 +1215,11 @@ class FirestoreMigrationService
             return Str::limit($m, 120, '');
         }
         $cf = $d['custom_fields'] ?? $d['customFields'] ?? null;
-        if (is_array($cf) && isset($cf['service_modality']) && is_string($cf['service_modality'])) {
-            return Str::limit($cf['service_modality'], 120, '');
+        if (is_array($cf)) {
+            $v = $cf['service_modality'] ?? $cf['modality'] ?? null;
+            if (is_string($v) && $v !== '') {
+                return Str::limit($v, 120, '');
+            }
         }
 
         return null;
@@ -1234,12 +1239,23 @@ class FirestoreMigrationService
     protected function listingContact(array $d): array
     {
         $c = isset($d['contact']) && is_array($d['contact']) ? $d['contact'] : [];
+        $phoneNumber = FirestoreDataNormalizer::trimString($c['phone'] ?? $c['phone_national'] ?? null);
+        $phoneCode = FirestoreDataNormalizer::trimString($c['phone_country_code'] ?? null);
+        $waNumber = FirestoreDataNormalizer::trimString($c['whatsapp'] ?? $c['whatsapp_number'] ?? $c['whatsapp_national'] ?? null);
+        $waCode = FirestoreDataNormalizer::trimString($c['whatsapp_country_code'] ?? null);
+        $contactMethod = $d['contactMethod'] ?? data_get($d, 'custom_fields.contactMethod') ?? data_get($d, 'customFields.contactMethod');
 
         return array_filter([
             'email' => FirestoreDataNormalizer::normalizeEmail(FirestoreDataNormalizer::trimString($c['email'] ?? null)),
-            'phone' => FirestoreDataNormalizer::trimString($c['phone'] ?? null),
-            'whatsapp' => FirestoreDataNormalizer::trimString($c['whatsapp'] ?? null),
-            'website' => FirestoreDataNormalizer::trimString($c['website'] ?? null),
+            'phone1' => ($phoneCode !== null || $phoneNumber !== null) ? array_filter([
+                'code' => $phoneCode,
+                'number' => $phoneNumber,
+            ], fn ($v) => $v !== null && $v !== '') : null,
+            'phone2' => ($waCode !== null || $waNumber !== null) ? array_filter([
+                'code' => $waCode,
+                'number' => $waNumber,
+            ], fn ($v) => $v !== null && $v !== '') : null,
+            'chat_enable' => FirestoreDataNormalizer::truthy($contactMethod),
         ], fn ($v) => $v !== null && $v !== '');
     }
 
@@ -1249,10 +1265,88 @@ class FirestoreMigrationService
      */
     protected function listingAdditional(array $d, string $fbDocId): array
     {
+        $cf = is_array($d['custom_fields'] ?? null) ? $d['custom_fields'] : (is_array($d['customFields'] ?? null) ? $d['customFields'] : []);
+        $contact = is_array($d['contact'] ?? null) ? $d['contact'] : [];
+        $openingHours = is_array($cf['opening_hours'] ?? null) ? $cf['opening_hours'] : [];
+        $hours = is_array($openingHours['hours'] ?? null) ? $openingHours['hours'] : (is_array($openingHours) ? $openingHours : []);
+
         return array_filter([
             'firebase' => ['document_id' => $fbDocId],
+            'website' => FirestoreDataNormalizer::trimString(
+                $d['website']
+                ?? $cf['website']
+                ?? data_get($contact, 'website')
+                ?? null
+            ),
+            'claim_ad' => FirestoreDataNormalizer::truthy($d['allow_claim'] ?? $cf['allow_claim'] ?? false),
             'location' => $this->listingLocation($d),
+            'schedule' => $this->listingSchedule($hours),
+            'social_media' => $this->listingSocialMedia($d, $cf),
+            'is_working_hour' => $this->listingIsWorkingHour($openingHours),
+            'show_approximate_location' => FirestoreDataNormalizer::truthy(
+                $d['showApproximateLocation']
+                ?? $d['show_approximate_location']
+                ?? $cf['show_approximate_location']
+                ?? false
+            ),
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    /**
+     * @param  array<string, mixed>  $hours
+     * @return list<array<string,string>>
+     */
+    protected function listingSchedule(array $hours): array
+    {
+        $days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        $out = [];
+        foreach ($days as $day) {
+            $row = $hours[$day] ?? null;
+            if (! is_array($row)) {
+                continue;
+            }
+            $start = FirestoreDataNormalizer::trimString($row['open'] ?? $row['start'] ?? null);
+            $end = FirestoreDataNormalizer::trimString($row['close'] ?? $row['end'] ?? null);
+            if ($start === null && $end === null) {
+                continue;
+            }
+            $out[] = array_filter([
+                'day' => $day,
+                'start' => $start,
+                'end' => $end,
+            ], fn ($v) => $v !== null && $v !== '');
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $d
+     * @param  array<string, mixed>  $cf
+     * @return array<string, string>|null
+     */
+    protected function listingSocialMedia(array $d, array $cf): ?array
+    {
+        $out = array_filter([
+            'instagram' => FirestoreDataNormalizer::trimString($d['social_instagram'] ?? $cf['social_instagram'] ?? null),
+            'facebook' => FirestoreDataNormalizer::trimString($d['social_facebook'] ?? $cf['social_facebook'] ?? null),
+            'tiktok' => FirestoreDataNormalizer::trimString($d['social_tiktok'] ?? $cf['social_tiktok'] ?? null),
+        ], fn ($v) => $v !== null && $v !== '');
+
+        return $out === [] ? null : $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $openingHours
+     */
+    protected function listingIsWorkingHour(array $openingHours): bool
+    {
+        $type = FirestoreDataNormalizer::trimString($openingHours['type'] ?? null);
+        if ($type === null) {
+            return false;
+        }
+
+        return strtolower($type) !== 'always';
     }
 
     /**
@@ -1389,20 +1483,23 @@ class FirestoreMigrationService
      */
     protected function listingTypeFlags(array $d, string $serviceType): ?int
     {
-        if ($serviceType !== Listing::PROPERTY_FOR_SALE) {
-            return null;
-        }
         $cf = $d['custom_fields'] ?? $d['customFields'] ?? [];
         $sr = is_array($cf) ? ($cf['sale_rent'] ?? null) : null;
         $lt = $d['listing_type'] ?? $d['listingType'] ?? null;
+        if (is_string($lt) && strcasecmp($lt, 'sale') === 0) {
+            return Listing::FOR_SALE;
+        }
         if (is_string($lt) && strcasecmp($lt, 'rent') === 0) {
             return Listing::FOR_RENT;
+        }
+        if (is_string($sr) && strtolower($sr) === 'sale') {
+            return Listing::FOR_SALE;
         }
         if (is_string($sr) && strtolower($sr) === 'rent') {
             return Listing::FOR_RENT;
         }
 
-        return Listing::FOR_SALE;
+        return $serviceType === Listing::PROPERTY_FOR_SALE ? Listing::FOR_SALE : Listing::FOR_RENT;
     }
 
     /**
@@ -1443,9 +1540,13 @@ class FirestoreMigrationService
         }
 
         return FirestoreDataNormalizer::jsonOrNull(array_filter([
-            'amenities' => $cf['amenities'] ?? null,
-            'laundry' => $cf['laundry'] ?? $d['laundry'] ?? null,
-            'parking' => $cf['parking'] ?? $d['parking'] ?? null,
+            'laundry_type' => $cf['laundry'] ?? $d['laundry'] ?? null,
+            'parking_type' => $cf['parking'] ?? $d['parking'] ?? null,
+            'square_meters' => $cf['sq_meters'] ?? $cf['square_meters'] ?? null,
+            'total_surface' => $cf['total_surface'] ?? null,
+            'additional_info' => [
+                'amenities' => is_array($cf['amenities'] ?? null) ? $cf['amenities'] : [],
+            ],
         ]));
     }
 
@@ -1480,9 +1581,8 @@ class FirestoreMigrationService
             'brand' => $cf['brand'] ?? $d['brand'] ?? null,
             'model' => $cf['model'] ?? $d['model'] ?? null,
             'year' => $cf['year'] ?? $d['year'] ?? null,
-            'mileage' => $cf['mileage'] ?? $d['mileage'] ?? null,
-            'fuel_type' => $cf['fuel_type'] ?? null,
-            'number_of_owners' => $cf['number_of_owners'] ?? null,
+            'milage' => $cf['mileage'] ?? $d['mileage'] ?? null,
+            'no_of_owners' => $cf['number_of_owners'] ?? null,
         ]));
     }
 
@@ -1507,6 +1607,12 @@ class FirestoreMigrationService
     protected function collectListingImageUrls(array $d): array
     {
         $rows = [];
+        foreach (['image', 'photo', 'featuredImage', 'featured_image'] as $singleKey) {
+            $single = $d[$singleKey] ?? null;
+            if (is_string($single) && trim($single) !== '') {
+                $rows[] = ['source' => -1, 'order' => 0, 'url' => trim($single)];
+            }
+        }
         foreach (['gallery', 'images'] as $sourceIndex => $key) {
             $items = $d[$key] ?? null;
             if (! is_array($items)) {
