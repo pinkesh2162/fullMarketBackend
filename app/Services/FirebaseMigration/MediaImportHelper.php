@@ -3,7 +3,6 @@
 namespace App\Services\FirebaseMigration;
 
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use Spatie\MediaLibrary\HasMedia;
 use Throwable;
 
@@ -20,40 +19,26 @@ class MediaImportHelper
     public function attachFromUrl(HasMedia $model, string $url, string $collection, string $disk): bool
     {
         $resolvedUrl = $this->normalizeMediaUrl($url);
-        if ($resolvedUrl !== null) {
-            for ($attempt = 1; $attempt <= $this->retries; $attempt++) {
-                try {
-                    $model->addMediaFromUrl($resolvedUrl)->toMediaCollection($collection, $disk);
-
-                    return true;
-                } catch (Throwable $e) {
-                    Log::warning('firebase-migration: media download failed', [
-                        'collection' => $collection,
-                        'attempt' => $attempt,
-                        'url' => $resolvedUrl,
-                        'message' => $e->getMessage(),
-                    ]);
-                    if ($attempt < $this->retries) {
-                        usleep($this->sleepMs * 1000);
-                    }
-                }
-            }
-        }
-
-        $localPath = $this->resolveLocalMediaPath($url);
-        if ($localPath === null) {
+        if ($resolvedUrl === null) {
             return false;
         }
-        try {
-            $model->addMedia($localPath)->toMediaCollection($collection, $disk);
 
-            return true;
-        } catch (Throwable $e) {
-            Log::warning('firebase-migration: media local import failed', [
-                'collection' => $collection,
-                'path' => $localPath,
-                'message' => $e->getMessage(),
-            ]);
+        for ($attempt = 1; $attempt <= $this->retries; $attempt++) {
+            try {
+                $model->addMediaFromUrl($resolvedUrl)->toMediaCollection($collection, $disk);
+
+                return true;
+            } catch (Throwable $e) {
+                Log::warning('firebase-migration: media download failed', [
+                    'collection' => $collection,
+                    'attempt' => $attempt,
+                    'url' => $resolvedUrl,
+                    'message' => $e->getMessage(),
+                ]);
+                if ($attempt < $this->retries) {
+                    usleep($this->sleepMs * 1000);
+                }
+            }
         }
 
         return false;
@@ -70,51 +55,30 @@ class MediaImportHelper
                 continue;
             }
             $resolvedUrl = $this->normalizeMediaUrl($url);
-            if ($resolvedUrl !== null) {
-                for ($attempt = 1; $attempt <= $this->retries; $attempt++) {
-                    try {
-                        $ext = $this->guessExtension($resolvedUrl);
-                        $fileName = $fileNamePrefix.'-'.$position.'-'.bin2hex(random_bytes(8)).'.'.$ext;
-                        $media = $model->addMediaFromUrl($resolvedUrl)
-                            ->usingFileName($fileName)
-                            ->toMediaCollection($collection, $disk);
-                        $media->order_column = $position;
-                        $media->save();
-                        $n++;
-                        break;
-                    } catch (Throwable $e) {
-                        Log::warning('firebase-migration: listing gallery image', [
-                            'attempt' => $attempt,
-                            'url' => $resolvedUrl,
-                            'message' => $e->getMessage(),
-                        ]);
-                        if ($attempt < $this->retries) {
-                            usleep($this->sleepMs * 1000);
-                        }
+            if ($resolvedUrl === null) {
+                continue;
+            }
+            for ($attempt = 1; $attempt <= $this->retries; $attempt++) {
+                try {
+                    $ext = $this->guessExtension($resolvedUrl);
+                    $fileName = $fileNamePrefix.'-'.$position.'-'.bin2hex(random_bytes(8)).'.'.$ext;
+                    $media = $model->addMediaFromUrl($resolvedUrl)
+                        ->usingFileName($fileName)
+                        ->toMediaCollection($collection, $disk);
+                    $media->order_column = $position;
+                    $media->save();
+                    $n++;
+                    break;
+                } catch (Throwable $e) {
+                    Log::warning('firebase-migration: listing gallery image', [
+                        'attempt' => $attempt,
+                        'url' => $resolvedUrl,
+                        'message' => $e->getMessage(),
+                    ]);
+                    if ($attempt < $this->retries) {
+                        usleep($this->sleepMs * 1000);
                     }
                 }
-                continue;
-            }
-
-            $localPath = $this->resolveLocalMediaPath($url);
-            if ($localPath === null) {
-                continue;
-            }
-            try {
-                $ext = $this->guessExtension($localPath);
-                $fileName = $fileNamePrefix.'-'.$position.'-'.bin2hex(random_bytes(8)).'.'.$ext;
-                $media = $model->addMedia($localPath)
-                    ->usingFileName($fileName)
-                    ->toMediaCollection($collection, $disk);
-                $media->order_column = $position;
-                $media->save();
-                $n++;
-            } catch (Throwable $e) {
-                Log::warning('firebase-migration: listing local image', [
-                    'collection' => $collection,
-                    'path' => $localPath,
-                    'message' => $e->getMessage(),
-                ]);
             }
         }
 
@@ -166,58 +130,6 @@ class MediaImportHelper
         $resolved = rtrim($baseUrl, '/').'/'.$path;
 
         return filter_var($resolved, FILTER_VALIDATE_URL) ? $resolved : null;
-    }
-
-    protected function resolveLocalMediaPath(string $raw): ?string
-    {
-        $input = trim($raw);
-        if ($input === '') {
-            return null;
-        }
-
-        if (is_file($input)) {
-            return $input;
-        }
-
-        $exportsStorage = config('firebase-migration.exports_storage_path', base_path('FirebaseDatabase/exports/storage'));
-        if (! is_string($exportsStorage) || trim($exportsStorage) === '') {
-            return null;
-        }
-        $root = rtrim($exportsStorage, DIRECTORY_SEPARATOR);
-
-        $normalized = str_replace('\\', '/', ltrim($input, '/'));
-        $normalized = Str::replaceFirst('public/', '', $normalized);
-
-        $candidates = [
-            $root.'/'.$normalized,
-        ];
-
-        if (str_starts_with($normalized, 'uploads/')) {
-            $afterUploads = substr($normalized, strlen('uploads/'));
-            $candidates[] = $root.'/'.$afterUploads;
-        }
-
-        if (str_contains($normalized, '/uploads/')) {
-            $afterMarker = explode('/uploads/', $normalized, 2)[1] ?? null;
-            if (is_string($afterMarker) && $afterMarker !== '') {
-                $candidates[] = $root.'/'.$afterMarker;
-            }
-        }
-
-        $baseName = basename($normalized);
-        if ($baseName !== '' && $baseName !== '.' && $baseName !== '..') {
-            $candidates[] = $root.'/images/'.$baseName;
-            $candidates[] = $root.'/store_images/'.$baseName;
-            $candidates[] = $root.'/stores/'.$baseName;
-        }
-
-        foreach ($candidates as $candidate) {
-            if (is_file($candidate)) {
-                return $candidate;
-            }
-        }
-
-        return null;
     }
 
     protected function legacyBaseUrl(): ?string

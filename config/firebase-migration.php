@@ -47,14 +47,6 @@ return [
     */
     'legacy_media_base_url' => env('FIREBASE_MIGRATION_LEGACY_MEDIA_BASE_URL', 'https://fullmarket.net'),
 
-    /*
-    | Local path for Firebase exported storage files (used when media source is a path, not URL).
-    */
-    'exports_storage_path' => env(
-        'FIREBASE_MIGRATION_EXPORTS_STORAGE_PATH',
-        base_path('FirebaseDatabase/exports/storage')
-    ),
-
     'json_decode_max_depth' => 512,
 
 ];
