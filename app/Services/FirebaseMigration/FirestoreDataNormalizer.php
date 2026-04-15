@@ -93,6 +93,23 @@ class FirestoreDataNormalizer
         if ($v === null || $v === '') {
             return null;
         }
+        if (is_array($v)) {
+            $iso = self::trimString($v['iso'] ?? null);
+            if ($iso !== null) {
+                try {
+                    return \Illuminate\Support\Carbon::parse($iso);
+                } catch (\Throwable) {
+                    return null;
+                }
+            }
+            if (isset($v['_seconds']) && is_numeric($v['_seconds'])) {
+                try {
+                    return \Illuminate\Support\Carbon::createFromTimestamp((int) $v['_seconds']);
+                } catch (\Throwable) {
+                    return null;
+                }
+            }
+        }
         if (is_numeric($v)) {
             $n = (float) $v;
             if ($n > 1e12) {

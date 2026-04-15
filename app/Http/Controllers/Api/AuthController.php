@@ -148,7 +148,9 @@ class AuthController extends Controller
 
         $resetLink = env('FRONTEND_URL', 'http://localhost:5173').'/reset-password?token='.$token.'&email='.$user->email.'&mode=resetPassword';
 
-        Mail::to($user->email)->send(new ForgotPasswordMail($user->email, $resetLink));
+        if (! app()->environment('local')) {
+            Mail::to($user->email)->send(new ForgotPasswordMail($user->email, $resetLink));
+        }
 
         return $this->actionSuccess('password_reset_link_sent');
     }

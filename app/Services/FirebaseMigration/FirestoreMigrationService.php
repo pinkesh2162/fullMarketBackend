@@ -319,8 +319,7 @@ class FirestoreMigrationService
                 continue;
             }
 
-            $first = FirestoreDataNormalizer::trimString($d['firstname'] ?? $d['first_name'] ?? $d['firstName'] ?? null);
-            $last = FirestoreDataNormalizer::trimString($d['lastname'] ?? $d['last_name'] ?? $d['lastName'] ?? null);
+            [$first, $last] = $this->resolveUserNames($d, $email);
             if ($first === null || $first === '') {
                 $this->logger->skip('user', 'empty_first_name', ['firebase_uid' => $fbUid, 'email' => $email]);
                 $skip++;
@@ -345,6 +344,7 @@ class FirestoreMigrationService
                 $prefs = is_array($d['preferences'] ?? null) ? $d['preferences'] : [];
                 $phone = FirestoreDataNormalizer::trimString($d['phonenumber'] ?? $d['phone'] ?? $d['phoneNumber'] ?? null);
                 $location = $this->userLocationFromLocations($d['locations'] ?? null);
+                $locationJson = $location !== null ? json_encode($location, JSON_UNESCAPED_UNICODE) : null;
                 $bio = FirestoreDataNormalizer::truncateUtf8(FirestoreDataNormalizer::trimString($d['bio'] ?? $d['description'] ?? null));
                 $lang = FirestoreDataNormalizer::trimString($prefs['language'] ?? $d['lang'] ?? null) ?? 'en';
                 $currency = FirestoreDataNormalizer::trimString($prefs['currency'] ?? null);
@@ -362,7 +362,7 @@ class FirestoreMigrationService
                     'email' => $email,
                     'password' => $this->passwordHash(),
                     'phone' => $phone !== null ? Str::limit($phone, 255, '') : null,
-                    'location' => $location,
+                    'location' => $locationJson,
                     'description' => $bio,
                     'lang' => Str::limit($lang, 16, ''),
                     'currency' => $currency !== null ? Str::limit($currency, 16, '') : null,
@@ -405,13 +405,60 @@ class FirestoreMigrationService
 
     /**
      * @param  array<string, mixed>  $d
+     * @return array{0:?string,1:?string}
+     */
+    protected function resolveUserNames(array $d, string $email): array
+    {
+        $first = FirestoreDataNormalizer::trimString($d['firstname'] ?? $d['first_name'] ?? $d['firstName'] ?? null);
+        $last = FirestoreDataNormalizer::trimString($d['lastname'] ?? $d['last_name'] ?? $d['lastName'] ?? null);
+
+        if ($first !== null) {
+            return [Str::limit($first, 255, ''), $last !== null ? Str::limit($last, 255, '') : null];
+        }
+
+        $display = FirestoreDataNormalizer::trimString($d['displayName'] ?? $d['display_name'] ?? null);
+        if ($display !== null) {
+            $parts = preg_split('/\s+/u', $display) ?: [];
+            $f = isset($parts[0]) ? trim((string) $parts[0]) : '';
+            $l = count($parts) > 1 ? trim(implode(' ', array_slice($parts, 1))) : '';
+            if ($f !== '') {
+                return [Str::limit($f, 255, ''), $l !== '' ? Str::limit($l, 255, '') : null];
+            }
+        }
+
+        $username = FirestoreDataNormalizer::trimString($d['username'] ?? null);
+        if ($username !== null) {
+            return [Str::limit($username, 255, ''), null];
+        }
+
+        $local = explode('@', $email)[0] ?? '';
+        $local = trim($local);
+
+        return [$local !== '' ? Str::limit($local, 255, '') : null, null];
+    }
+
+    /**
+     * @param  array<string, mixed>  $d
      */
     protected function userProfilePhotoUrl(array $d): ?string
     {
-        foreach (['profilePhoto', 'profile_photo', 'photoURL', 'photoUrl', 'avatar', 'image'] as $k) {
+        foreach ([
+            'profilePhoto',
+            'profile_photo',
+            'photoURL',
+            'photoUrl',
+            'pp_thumb_url',
+            'avatar',
+            'avatarUrl',
+            'ownerAvatar',
+            'image',
+        ] as $k) {
             $v = $d[$k] ?? null;
-            if (is_string($v) && filter_var($v, FILTER_VALIDATE_URL)) {
-                return $v;
+            if (is_string($v)) {
+                $s = trim($v);
+                if ($s !== '') {
+                    return $s;
+                }
             }
         }
 
@@ -595,11 +642,11 @@ class FirestoreMigrationService
 
                 if (! $skipMedia) {
                     $banner = FirestoreDataNormalizer::trimString($d['banner'] ?? $d['storeBanner'] ?? null);
-                    if ($banner !== null && filter_var($banner, FILTER_VALIDATE_URL)) {
+                    if ($banner !== null) {
                         $this->mediaHelper->attachFromUrl($store, $banner, Store::COVER_PHOTO, $this->disk());
                     }
                     $logo = FirestoreDataNormalizer::trimString($d['logo'] ?? $d['storeLogo'] ?? null);
-                    if ($logo !== null && filter_var($logo, FILTER_VALIDATE_URL)) {
+                    if ($logo !== null) {
                         $this->mediaHelper->attachFromUrl($store, $logo, Store::PROFILE_PHOTO, $this->disk());
                     }
                 }
@@ -784,6 +831,9 @@ class FirestoreMigrationService
             }
 
             $categoryId = $this->categoryResolver->resolveLocalCategoryId($d);
+            if ($categoryId === null) {
+                $categoryId = $this->resolveCategoryFromListingName($d, $dryRun);
+            }
             if ($categoryId === null) {
                 $this->logger->skip('listing', 'unresolved_category', ['firebase_doc' => $fbId]);
                 $skip++;
@@ -1148,20 +1198,23 @@ class FirestoreMigrationService
             }
             foreach ($items as $item) {
                 if (! is_array($item)) {
+                    if (is_string($item) && trim($item) !== '') {
+                        $rows[] = ['source' => $sourceIndex, 'order' => 0, 'url' => trim($item)];
+                    }
                     continue;
                 }
                 $u = $item['url'] ?? $item['src'] ?? null;
-                if (! is_string($u) || ! filter_var($u, FILTER_VALIDATE_URL)) {
+                if (! is_string($u) || trim($u) === '') {
                     $sizes = $item['sizes'] ?? null;
                     if (is_array($sizes) && isset($sizes['full']['src']) && is_string($sizes['full']['src'])) {
                         $u = $sizes['full']['src'];
                     }
                 }
-                if (! is_string($u) || ! filter_var($u, FILTER_VALIDATE_URL)) {
+                if (! is_string($u) || trim($u) === '') {
                     continue;
                 }
                 $order = isset($item['order']) ? (int) $item['order'] : 0;
-                $rows[] = ['source' => $sourceIndex, 'order' => $order, 'url' => $u];
+                $rows[] = ['source' => $sourceIndex, 'order' => $order, 'url' => trim($u)];
             }
         }
         usort($rows, function (array $a, array $b): int {
@@ -1183,5 +1236,46 @@ class FirestoreMigrationService
         }
 
         return $out;
+    }
+
+    /**
+     * When Firestore category ids are custom/non-migrated, fallback to category name.
+     */
+    protected function resolveCategoryFromListingName(array $d, bool $dryRun): ?int
+    {
+        $name = FirestoreDataNormalizer::trimString(
+            $d['categoryName']
+            ?? $d['category_name']
+            ?? data_get($d, 'custom_fields.main_service_category_name')
+            ?? null
+        );
+        if ($name === null) {
+            return null;
+        }
+
+        $normalized = strtolower(trim(preg_replace('/\s+/u', ' ', $name) ?? $name));
+        if ($normalized === '') {
+            return null;
+        }
+
+        $existing = Category::query()
+            ->whereRaw('LOWER(name) = ?', [$normalized])
+            ->whereNull('parent_id')
+            ->value('id');
+        if ($existing !== null) {
+            return (int) $existing;
+        }
+
+        if ($dryRun) {
+            return null;
+        }
+
+        $created = Category::query()->create([
+            'user_id' => null,
+            'name' => Str::limit($name, 255, ''),
+            'parent_id' => null,
+        ]);
+
+        return (int) $created->id;
     }
 }

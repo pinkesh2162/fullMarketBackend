@@ -32,10 +32,21 @@ class FirebaseMigrateSampleCommand extends Command
         $dry = (bool) $this->option('dry-run');
         $skipMedia = (bool) $this->option('skip-media');
 
-        $this->info('Firebase migration (sample, limit='.$limit.' per step)…');
+        $this->info('Firebase migration (sample, limit='.$limit.' for categories/stores/listings; users imported fully for FK mapping)…');
         $line = fn (string $m) => $this->line($m);
 
-        $totals = $migration->run($limit, $dry, $skipMedia, $line);
+        $totals = ['ok' => 0, 'skip' => 0, 'err' => 0];
+        foreach ([
+            fn () => $migration->runCategories($limit, $dry, $skipMedia, $line),
+            fn () => $migration->runUsers(null, $dry, $skipMedia, $line),
+            fn () => $migration->runStores($limit, $dry, $skipMedia, $line),
+            fn () => $migration->runListings($limit, $dry, $skipMedia, $line),
+        ] as $step) {
+            $r = $step();
+            $totals['ok'] += $r['ok'];
+            $totals['skip'] += $r['skip'];
+            $totals['err'] += $r['err'];
+        }
 
         $this->table(
             ['Metric', 'Count'],

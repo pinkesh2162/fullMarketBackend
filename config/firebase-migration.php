@@ -41,6 +41,12 @@ return [
 
     'media_retry_sleep_ms' => 250,
 
+    /*
+    | Base URL used when exported media paths are legacy relative paths
+    | such as /public/uploads/... or uploads/...
+    */
+    'legacy_media_base_url' => env('FIREBASE_MIGRATION_LEGACY_MEDIA_BASE_URL', 'https://fullmarket.net'),
+
     'json_decode_max_depth' => 512,
 
 ];

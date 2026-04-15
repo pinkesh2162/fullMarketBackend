@@ -87,8 +87,9 @@ class UserRepository extends BaseRepository
 
                 $user = $this->create($data);
 
-                // Dispatch emails to queue (NON-BLOCKING ⚡)
-                Mail::to($user->email)->send(new VerifyEmailMail($user->email, $otp));
+                if (! app()->environment('local')) {
+                    Mail::to($user->email)->send(new VerifyEmailMail($user->email, $otp));
+                }
 
                 // Temporarily store password in cache for WelcomeMail (30 mins)
                 Cache::put('user_pass_'.$user->email, $request->password, now()->addMinutes(30));
@@ -284,8 +285,9 @@ class UserRepository extends BaseRepository
         // Retrieve temporary password if available
         $password = Cache::pull('user_pass_'.$user->email);
 
-        // Send Welcome Mail after verification
-        Mail::to($user->email)->send(new WelcomeMail($user, $password));
+        if (! app()->environment('local')) {
+            Mail::to($user->email)->send(new WelcomeMail($user, $password));
+        }
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
@@ -315,7 +317,9 @@ class UserRepository extends BaseRepository
             'otp_expires_at' => now()->addMinutes(10),
         ]);
 
-        Mail::to($user->email)->queue(new VerifyEmailMail($user->email, $otp));
+        if (! app()->environment('local')) {
+            Mail::to($user->email)->queue(new VerifyEmailMail($user->email, $otp));
+        }
 
         return true;
     }
