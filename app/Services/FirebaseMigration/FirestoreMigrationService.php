@@ -1055,11 +1055,13 @@ class FirestoreMigrationService
                 $this->logger->skip('listing', 'invalid_store_fk', ['firebase_doc' => $fbId, 'store_id' => $storeId]);
                 $storeId = null;
             }
+            if ($storeId === null) {
+                $this->logger->skip('listing', 'store_not_found', ['firebase_doc' => $fbId, 'owner' => $ownerUid]);
+                $skip++;
+                continue;
+            }
 
             $categoryId = $this->categoryResolver->resolveLocalCategoryId($d);
-            if ($categoryId === null) {
-                $categoryId = $this->resolveCategoryFromListingName($d, $dryRun);
-            }
             if ($categoryId === null) {
                 $this->logger->skip('listing', 'unresolved_category', ['firebase_doc' => $fbId]);
                 $skip++;
@@ -1166,24 +1168,37 @@ class FirestoreMigrationService
      */
     protected function resolveListingStoreId(array $d, string $ownerUid, int $userId): ?int
     {
-        $author = $d['author_id'] ?? $d['authorId'] ?? null;
-        if ($author === null || $author === '') {
-            $sid = $this->state->getStoreIdByOwnerUid($ownerUid);
-            if ($sid !== null) {
-                return $sid;
+        $candidateStoreKeys = [
+            $d['author_id'] ?? null,
+            $d['authorId'] ?? null,
+            $d['storeId'] ?? null,
+            $d['store_id'] ?? null,
+        ];
+
+        foreach ($candidateStoreKeys as $keyRaw) {
+            if (! is_string($keyRaw) && ! is_numeric($keyRaw)) {
+                continue;
+            }
+            $key = trim((string) $keyRaw);
+            if ($key === '') {
+                continue;
             }
 
-            return Store::query()->where('user_id', $userId)->value('id');
+            $byDoc = $this->state->getStoreIdByDocId($key);
+            if ($byDoc !== null) {
+                return $byDoc;
+            }
+            $byOwner = $this->state->getStoreIdByOwnerUid($key);
+            if ($byOwner !== null) {
+                return $byOwner;
+            }
         }
-        $key = trim((string) $author);
-        $byDoc = $this->state->getStoreIdByDocId($key);
-        if ($byDoc !== null) {
-            return $byDoc;
+
+        $byOwnerUid = $this->state->getStoreIdByOwnerUid($ownerUid);
+        if ($byOwnerUid !== null) {
+            return $byOwnerUid;
         }
-        $byOwner = $this->state->getStoreIdByOwnerUid($key);
-        if ($byOwner !== null) {
-            return $byOwner;
-        }
+
         $store = Store::query()->where('user_id', $userId)->value('id');
 
         return $store !== null ? (int) $store : null;
