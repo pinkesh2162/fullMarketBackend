@@ -1272,24 +1272,57 @@ class FirestoreMigrationService
 
         return array_filter([
             'firebase' => ['document_id' => $fbDocId],
-            'website' => FirestoreDataNormalizer::trimString(
-                $d['website']
-                ?? $cf['website']
-                ?? data_get($contact, 'website')
-                ?? null
-            ),
-            'claim_ad' => FirestoreDataNormalizer::truthy($d['allow_claim'] ?? $cf['allow_claim'] ?? false),
+            'website' => $this->listingWebsite($d, $cf, $contact),
+            'claim_ad' => $this->boolString(FirestoreDataNormalizer::truthy($d['allow_claim'] ?? $cf['allow_claim'] ?? false)),
             'location' => $this->listingLocation($d),
             'schedule' => $this->listingSchedule($hours),
             'social_media' => $this->listingSocialMedia($d, $cf),
-            'is_working_hour' => $this->listingIsWorkingHour($openingHours),
-            'show_approximate_location' => FirestoreDataNormalizer::truthy(
+            'is_working_hour' => $this->boolString($this->listingIsWorkingHour($openingHours)),
+            'show_approximate_location' => $this->boolString(FirestoreDataNormalizer::truthy(
                 $d['showApproximateLocation']
                 ?? $d['show_approximate_location']
                 ?? $cf['show_approximate_location']
                 ?? false
-            ),
+            )),
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    protected function boolString(bool $value): string
+    {
+        return $value ? 'true' : 'false';
+    }
+
+    /**
+     * @param  array<string, mixed>  $d
+     * @param  array<string, mixed>  $cf
+     * @param  array<string, mixed>  $contact
+     */
+    protected function listingWebsite(array $d, array $cf, array $contact): ?string
+    {
+        $candidates = [
+            $d['website'] ?? null,
+            $d['website_url'] ?? null,
+            data_get($d, 'contact.website'),
+            data_get($d, 'contactInformation.website'),
+            $cf['website'] ?? null,
+            $cf['website_url'] ?? null,
+            data_get($cf, 'contact.website'),
+            data_get($cf, 'contactInformation.website'),
+            data_get($d, 'custom_fields.website'),
+            data_get($d, 'custom_fields.website_url'),
+            data_get($d, 'customFields.website'),
+            data_get($d, 'customFields.website_url'),
+            $contact['website'] ?? null,
+        ];
+
+        foreach ($candidates as $value) {
+            $s = FirestoreDataNormalizer::trimString($value);
+            if ($s !== null) {
+                return $s;
+            }
+        }
+
+        return null;
     }
 
     /**
