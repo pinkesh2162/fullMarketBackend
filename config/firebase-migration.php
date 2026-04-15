@@ -37,9 +37,20 @@ return [
 
     'sample_limit' => 25,
 
+    /*
+    | Emit a console line every N user JSON files while scanning (plus first and last).
+    | Helps sample mode stay responsive while importing all users for FK mapping.
+    */
+    'progress_interval' => (int) env('FIREBASE_MIGRATION_PROGRESS_INTERVAL', 50),
+
     'media_download_retries' => 3,
 
     'media_retry_sleep_ms' => 250,
+
+    /*
+    | Max seconds for each remote image when using addMediaFromUrl (see TimeoutMediaDownloader).
+    */
+    'media_download_timeout_seconds' => (int) env('FIREBASE_MIGRATION_MEDIA_TIMEOUT', 30),
 
     /*
     | Base URL used when exported media paths are legacy relative paths

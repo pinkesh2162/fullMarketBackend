@@ -33,7 +33,14 @@ class FirebaseMigrateSampleCommand extends Command
         $skipMedia = (bool) $this->option('skip-media');
 
         $this->info('Firebase migration (sample, limit='.$limit.' for categories/stores/listings; users imported fully for FK mapping)…');
-        $line = fn (string $m) => $this->line($m);
+        $this->comment('After categories finish, the users step can run for a while (many JSON files + profile images). Remote images use a timeout (FIREBASE_MIGRATION_MEDIA_TIMEOUT); use --skip-media to skip downloads.');
+        $line = function (string $m): void {
+            $this->line($m);
+            if (function_exists('ob_flush')) {
+                @ob_flush();
+            }
+            flush();
+        };
 
         $totals = ['ok' => 0, 'skip' => 0, 'err' => 0];
         foreach ([

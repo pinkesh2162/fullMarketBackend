@@ -32,7 +32,13 @@ class FirebaseMigrateFullCommand extends Command
         $skipMedia = (bool) $this->option('skip-media');
 
         $this->info('Firebase migration (full dataset, no per-step limit)…');
-        $line = fn (string $m) => $this->line($m);
+        $line = function (string $m): void {
+            $this->line($m);
+            if (function_exists('ob_flush')) {
+                @ob_flush();
+            }
+            flush();
+        };
 
         $totals = $migration->run(null, $dry, $skipMedia, $line);
 
