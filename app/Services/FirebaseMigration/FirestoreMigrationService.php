@@ -848,12 +848,23 @@ class FirestoreMigrationService
             $c = [];
         }
 
-        return array_filter([
-            'phone' => FirestoreDataNormalizer::trimString($c['phone'] ?? $c['phone_national'] ?? null),
-            'whatsapp' => FirestoreDataNormalizer::trimString($c['whatsapp'] ?? $c['whatsapp_number'] ?? null),
-            'email' => FirestoreDataNormalizer::normalizeEmail(FirestoreDataNormalizer::trimString($c['email'] ?? null)),
-            'website' => FirestoreDataNormalizer::trimString($c['website'] ?? null),
-        ], fn ($v) => $v !== null && $v !== '');
+        $email = FirestoreDataNormalizer::normalizeEmail(
+            FirestoreDataNormalizer::trimString($c['email'] ?? $d['email'] ?? null)
+        );
+        $phone = FirestoreDataNormalizer::trimString($c['phone'] ?? $c['phone_national'] ?? $d['phone'] ?? null);
+        $phoneCode = FirestoreDataNormalizer::trimString($c['phone_country_code'] ?? $d['phone_country_code'] ?? null);
+        $whatsappPhone = FirestoreDataNormalizer::trimString($c['whatsapp'] ?? $c['whatsapp_number'] ?? $d['whatsapp'] ?? null);
+        $whatsappCode = FirestoreDataNormalizer::trimString($c['whatsapp_country_code'] ?? $d['whatsapp_country_code'] ?? null);
+
+        $out = [
+            'email' => $email,
+            'phone' => $phone,
+            'phone_code' => $phoneCode,
+            'whatsapp_code' => $whatsappCode,
+            'whatsapp_phone' => $whatsappPhone,
+        ];
+
+        return array_filter($out, fn ($v) => $v !== null && $v !== '');
     }
 
     /**
@@ -867,14 +878,18 @@ class FirestoreMigrationService
             return null;
         }
 
-        return array_filter([
-            'facebook' => FirestoreDataNormalizer::trimString($s['facebook'] ?? null),
-            'instagram' => FirestoreDataNormalizer::trimString($s['instagram'] ?? null),
-            'twitter' => FirestoreDataNormalizer::trimString($s['twitter'] ?? null),
-            'linkedin' => FirestoreDataNormalizer::trimString($s['linkedin'] ?? null),
-            'youtube' => FirestoreDataNormalizer::trimString($s['youtube'] ?? null),
-            'tiktok' => FirestoreDataNormalizer::trimString($s['tiktok'] ?? null),
-        ], fn ($v) => $v !== null && $v !== '');
+        $urls = [];
+        foreach (['website', 'instagram', 'facebook', 'twitter', 'linkedin', 'youtube', 'tiktok', 'pinterest'] as $key) {
+            $value = FirestoreDataNormalizer::trimString($s[$key] ?? ($key === 'website' ? ($d['website'] ?? null) : null));
+            if ($value === null) {
+                continue;
+            }
+            $urls[] = $value;
+        }
+
+        $unique = array_values(array_unique($urls));
+
+        return $unique === [] ? null : $unique;
     }
 
     /**
@@ -882,13 +897,65 @@ class FirestoreMigrationService
      */
     protected function openingHours(array $d): ?array
     {
-        $oh = $d['opening_hours'] ?? $d['openingHours'] ?? null;
-        if (is_array($oh)) {
-            return $oh;
+        $raw = $this->extractStoreHoursSource($d);
+        if ($raw === null) {
+            return null;
         }
-        $cf = $d['custom_fields'] ?? $d['customFields'] ?? null;
-        if (is_array($cf) && isset($cf['opening_hours']) && is_array($cf['opening_hours'])) {
-            return $cf['opening_hours'];
+
+        $days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+        $type = FirestoreDataNormalizer::trimString($raw['type'] ?? null);
+        $isFlexible = strtolower((string) $type) === 'always' ? '0' : '1';
+
+        $hours = $raw['hours'] ?? $raw['businessHours'] ?? $raw['working_hour'] ?? $raw;
+        if (! is_array($hours)) {
+            $hours = [];
+        }
+
+        $workingHour = [];
+        foreach ($days as $day) {
+            $item = $hours[$day] ?? null;
+            if (! is_array($item)) {
+                $item = [];
+            }
+
+            $closed = FirestoreDataNormalizer::truthy($item['closed'] ?? false);
+            $open = FirestoreDataNormalizer::trimString($item['open'] ?? $item['start'] ?? $item['start_time'] ?? null);
+            $close = FirestoreDataNormalizer::trimString($item['close'] ?? $item['end'] ?? $item['end_time'] ?? null);
+
+            $workingHour[] = [
+                'day' => $day,
+                'is_open' => $closed ? '0' : '1',
+                'end_time' => $close ?? '',
+                'start_time' => $open ?? '',
+            ];
+        }
+
+        return [
+            'is_flexible' => $isFlexible,
+            'working_hour' => $workingHour,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $d
+     * @return array<string, mixed>|null
+     */
+    protected function extractStoreHoursSource(array $d): ?array
+    {
+        $candidates = [
+            $d['opening_hours'] ?? null,
+            $d['openingHours'] ?? null,
+            $d['settings']['businessHours'] ?? null,
+            $d['businessHours'] ?? null,
+            (is_array($d['custom_fields'] ?? null) ? ($d['custom_fields']['opening_hours'] ?? null) : null),
+            (is_array($d['customFields'] ?? null) ? ($d['customFields']['opening_hours'] ?? null) : null),
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_array($candidate)) {
+                return $candidate;
+            }
         }
 
         return null;
