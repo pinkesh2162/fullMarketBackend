@@ -483,7 +483,7 @@ class FirestoreMigrationService
      *   last_name:?string,
      *   phone:?string,
      *   phone_code:?string,
-     *   location:?string,
+     *   location:?array<string, string>,
      *   description:?string,
      *   lang:string,
      *   currency:?string,
@@ -501,8 +501,7 @@ class FirestoreMigrationService
         $prefs = is_array($d['preferences'] ?? null) ? $d['preferences'] : [];
         $phone = FirestoreDataNormalizer::trimString($d['phonenumber'] ?? $d['phone'] ?? $d['phoneNumber'] ?? $d['phone_national'] ?? null);
         $phoneCode = FirestoreDataNormalizer::trimString($d['phone_country_code'] ?? $d['phoneCode'] ?? null);
-        $location = $this->userLocationPayload($d);
-        $locationJson = $location !== null ? json_encode($location, JSON_UNESCAPED_UNICODE) : null;
+        $location = $this->userLocationStoragePayload($d);
         $description = FirestoreDataNormalizer::truncateUtf8(
             FirestoreDataNormalizer::trimString($d['description'] ?? $d['bio'] ?? null)
         );
@@ -522,7 +521,7 @@ class FirestoreMigrationService
             'last_name' => $last !== null ? Str::limit($last, 255, '') : null,
             'phone' => $phone !== null ? Str::limit($phone, 255, '') : null,
             'phone_code' => $phoneCode !== null ? Str::limit($phoneCode, 32, '') : null,
-            'location' => $locationJson,
+            'location' => $location,
             'description' => $description,
             'lang' => Str::limit($lang, 16, ''),
             'currency' => $currency !== null ? Str::limit($currency, 16, '') : null,
@@ -536,15 +535,90 @@ class FirestoreMigrationService
     }
 
     /**
+     * Stored on users as JSON object: address, lat, long (string coordinates).
+     *
+     * @param  array<string, mixed>  $d
+     * @return array<string, string>|null
+     */
+    protected function userLocationStoragePayload(array $d): ?array
+    {
+        $raw = $this->userLocationPayload($d);
+
+        return $this->formatUserLocationForDatabase($raw);
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $raw  From {@see normalizedLocationPayload()} (lat/long/address/place_id)
+     * @return array<string, string>|null
+     */
+    protected function formatUserLocationForDatabase(?array $raw): ?array
+    {
+        if ($raw === null) {
+            return null;
+        }
+
+        $out = [];
+
+        $address = isset($raw['address']) && is_string($raw['address']) ? trim($raw['address']) : null;
+        if ($address !== null && $address !== '') {
+            $out['address'] = Str::limit($address, 500, '');
+        }
+
+        foreach (['lat', 'long'] as $key) {
+            if (! array_key_exists($key, $raw) || $raw[$key] === null) {
+                continue;
+            }
+            $v = $raw[$key];
+            if (is_string($v) && trim($v) === '') {
+                continue;
+            }
+            $s = $this->locationCoordinateToString($v);
+            if ($s !== '') {
+                $out[$key] = $s;
+            }
+        }
+
+        return $out === [] ? null : $out;
+    }
+
+    /**
+     * @param  int|float|string  $v
+     */
+    protected function locationCoordinateToString(int|float|string $v): string
+    {
+        if (is_string($v)) {
+            return trim($v);
+        }
+        if (is_int($v)) {
+            return (string) $v;
+        }
+
+        $s = rtrim(rtrim(sprintf('%.10F', $v), '0'), '.');
+
+        return $s === '-0' ? '0' : $s;
+    }
+
+    /**
      * @param  array<string, mixed>  $d
      * @return array<string, mixed>|null
      */
     protected function userLocationPayload(array $d): ?array
     {
+        if (isset($d['location']) && is_string($d['location'])) {
+            $t = trim($d['location']);
+            if ($t !== '' && ($t[0] === '{' || $t[0] === '[')) {
+                $decoded = json_decode($t, true);
+                if (is_array($decoded)) {
+                    $d['location'] = FirestoreDataNormalizer::utf8Recursive($decoded);
+                }
+            }
+        }
+
         $fromLocations = $this->userLocationFromLocations($d['locations'] ?? null);
         if ($fromLocations !== null) {
             return $fromLocations;
         }
+
         return $this->normalizedLocationPayload(
             $d,
             ['address', 'location.address', 'location.name'],
