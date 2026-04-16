@@ -1,5 +1,10 @@
 <?php
 
+use App\Providers\AppServiceProvider;
+use App\Providers\AuthServiceProvider;
+use App\Providers\BroadcastServiceProvider;
+use App\Providers\EventServiceProvider;
+use App\Providers\RouteServiceProvider;
 use Illuminate\Support\Facades\Facade;
 use Illuminate\Support\ServiceProvider;
 
@@ -58,6 +63,7 @@ return [
     'url' => env('APP_URL', 'http://localhost'),
     'frontend_url' => env('FRONTEND_URL', 'http://localhost'),
     'firebase_service_account' => env('FIREBASE_SERVICE_ACCOUNT', 'firebase_service_account.json'),
+    'firebase_project_id' => env('FIREBASE_PROJECT_ID'),
     'media_disc' => env('MEDIA_DISK', 'public'),
     'admin_email' => env('ADMIN_EMAIL'),
     'moderation_email' => env('MODERATION_EMAIL', env('ADMIN_EMAIL')),
@@ -167,11 +173,11 @@ return [
         /*
          * Application Service Providers...
          */
-        App\Providers\AppServiceProvider::class,
-        App\Providers\AuthServiceProvider::class,
-        App\Providers\BroadcastServiceProvider::class,
-        App\Providers\EventServiceProvider::class,
-        App\Providers\RouteServiceProvider::class,
+        AppServiceProvider::class,
+        AuthServiceProvider::class,
+        BroadcastServiceProvider::class,
+        EventServiceProvider::class,
+        RouteServiceProvider::class,
     ])->toArray(),
 
     /*
@@ -186,7 +192,7 @@ return [
     */
 
     'aliases' => Facade::defaultAliases()->merge([
-        // 'Example' => App\Facades\Example::class,
+        'Firebase' => Kreait\Laravel\Firebase\Facades\Firebase::class,
     ])->toArray(),
 
 ];

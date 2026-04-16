@@ -7,12 +7,15 @@ use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\ClaimController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\FavoriteController;
+use App\Http\Controllers\Api\Firebase\NotificationController as FirebasePushNotificationController;
 use App\Http\Controllers\Api\FriendRequestController;
 use App\Http\Controllers\Api\ListingController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SearchSuggestionController;
+use App\Http\Controllers\Api\SendFcmToAllUsersController;
+use App\Http\Controllers\Api\SendFcmTokenNotificationController;
 use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\Api\StoreController;
 use App\Http\Controllers\Api\StoreFollowController;
@@ -45,6 +48,12 @@ Route::get('get/listing/{id}', [ListingController::class, 'show']);
 Route::get('/store', [StoreController::class, 'show']);
 Route::get('/public-profile', [ContactController::class, 'getPublicProfileByUniqueId']);
 Route::post('/send-notification-test', [StoreFollowController::class, 'sendNotificationTest']);
+
+Route::post('/send-notification', [FirebasePushNotificationController::class, 'send']);
+
+Route::post('/send-notification-to-token', SendFcmTokenNotificationController::class);
+
+Route::post('/send-notification-to-all-users', SendFcmToAllUsersController::class);
 
 Route::middleware(['auth:sanctum'])->group(function () {
     //    user profile route

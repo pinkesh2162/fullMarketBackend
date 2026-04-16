@@ -8,7 +8,7 @@ use App\Http\Requests\Api\EditProfileRequest;
 use App\Http\Resources\UserResource;
 use App\Repositories\UserRepository;
 use Illuminate\Http\JsonResponse;
-use \Illuminate\Http\Request;
+use Illuminate\Http\Request;
 
 class ProfileController extends Controller
 {
@@ -19,7 +19,6 @@ class ProfileController extends Controller
 
     /**
      * ProfileController constructor.
-     * @param  UserRepository  $userRepository
      */
     public function __construct(UserRepository $userRepository)
     {
@@ -29,7 +28,6 @@ class ProfileController extends Controller
     /**
      * Get the authenticated user's profile.
      *
-     * @param  Request  $request
      * @return JsonResponse
      */
     public function getProfile(Request $request)
@@ -41,9 +39,6 @@ class ProfileController extends Controller
 
     /**
      * Update the authenticated user's profile.
-     *
-     * @param EditProfileRequest $request
-     * @return JsonResponse
      */
     public function updateProfile(EditProfileRequest $request): JsonResponse
     {
@@ -58,8 +53,6 @@ class ProfileController extends Controller
     }
 
     /**
-     * @param  Request  $request
-     *
      * @return JsonResponse
      */
     public function updateFcmToken(Request $request)
@@ -68,7 +61,10 @@ class ProfileController extends Controller
         $user = $request->user();
 
         if ($request->has('fcm_token')) {
-            $user->update(['fcm_token' => $request->fcm_token]);
+            $token = $request->input('fcm_token');
+            $user->update([
+                'fcm_token' => is_string($token) ? trim($token) : $token,
+            ]);
         }
 
         return $this->actionSuccess('update_fcm_token');
@@ -77,9 +73,7 @@ class ProfileController extends Controller
     /**
      * Delete the authenticated user account and all associated data.
      *
-     * @param  Request  $request
      * @throws ApiOperationFailedException
-     * @return JsonResponse
      */
     public function deleteAccount(Request $request): JsonResponse
     {
@@ -90,9 +84,6 @@ class ProfileController extends Controller
 
     /**
      * Get the authenticated user's settings.
-     *
-     * @param  Request  $request
-     * @return JsonResponse
      */
     public function getSettings(Request $request): JsonResponse
     {
@@ -107,9 +98,6 @@ class ProfileController extends Controller
 
     /**
      * Update the authenticated user's settings.
-     *
-     * @param  Request  $request
-     * @return JsonResponse
      */
     public function updateSettings(Request $request): JsonResponse
     {
@@ -122,7 +110,7 @@ class ProfileController extends Controller
                 'business_create',
                 'follow_request',
                 'notification_time_start',
-                'notification_time_end'
+                'notification_time_end',
             ])
         );
 
@@ -131,15 +119,12 @@ class ProfileController extends Controller
 
     /**
      * Toggle the authenticated user's hide_ads preference.
-     *
-     * @param  Request  $request
-     * @return JsonResponse
      */
     public function toggleHideAds(Request $request): JsonResponse
     {
         $user = $request->user();
         $settings = $user->settings()->firstOrCreate([]);
-        $settings->update(['hide_ads' => !$settings->hide_ads]);
+        $settings->update(['hide_ads' => ! $settings->hide_ads]);
 
         return $this->actionSuccess('preference_updated', ['hide_ads' => $settings->hide_ads]);
     }

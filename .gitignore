@@ -24,6 +24,7 @@ Homestead.yaml
 Thumbs.db
 /public/uploads
 /firebase_service_account.json
+/serviceAccountKey.json
 config.bat
 
 /FirebaseDatabase/**

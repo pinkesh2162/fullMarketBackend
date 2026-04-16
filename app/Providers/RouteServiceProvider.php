@@ -32,10 +32,21 @@ class RouteServiceProvider extends ServiceProvider
             return Limit::perDay(50)->by($request->user()?->id ?: $request->ip());
         });
 
+        RateLimiter::for('admin-push', function (Request $request) {
+            $claims = $request->attributes->get('firebase_claims');
+            $by = ($claims instanceof \stdClass && ! empty($claims->sub)) ? (string) $claims->sub : $request->ip();
+
+            return Limit::perMinute(12)->by($by);
+        });
+
         $this->routes(function () {
             Route::middleware('api')
                 ->prefix('api')
                 ->group(base_path('routes/api.php'));
+
+            Route::middleware('api')
+                ->prefix('api')
+                ->group(base_path('routes/admin.php'));
 
             Route::middleware('web')
                 ->group(base_path('routes/web.php'));

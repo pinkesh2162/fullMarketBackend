@@ -40,4 +40,9 @@ return [
         'emit_secret' => env('SOCKET_IO_EMIT_SECRET'),
     ],
 
+    /*
+    | FCM topic broadcast (POST /api/send-notification) — compare to Bearer token.
+    */
+    'admin_broadcast_secret' => env('ADMIN_SECRET'),
+
 ];
