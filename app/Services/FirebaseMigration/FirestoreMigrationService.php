@@ -38,6 +38,26 @@ class FirestoreMigrationService
     }
 
     /**
+     * Periodic progress for long CLI steps (avoids “silent hang” while scanning many JSON files).
+     * Uses a tighter interval for small exports (e.g. 75 files) so the next line is not ~50 files away.
+     */
+    protected function lineMigrationProgress(callable $line, string $label, int $current, int $total): void
+    {
+        if ($total <= 0) {
+            return;
+        }
+        $configured = max(1, (int) config('firebase-migration.progress_interval', 50));
+        if ($total <= 200) {
+            $interval = max(1, (int) ceil($total / 15));
+        } else {
+            $interval = min($configured, max(1, (int) ceil($total / 20)));
+        }
+        if ($current === 1 || $current === $total || ($current % $interval) === 0) {
+            $line(sprintf('%s: progress %d/%d file(s)', $label, $current, $total));
+        }
+    }
+
+    /**
      * @return array{ok:int,skip:int,err:int}
      */
     public function run(?int $limit, bool $dryRun, bool $skipMedia, ?callable $line = null): array
@@ -75,6 +95,11 @@ class FirestoreMigrationService
         }
 
         $ordered = $this->orderCategoriesForInsert($docs);
+        $line(sprintf(
+            'Categories: %d document(s) in export, applying limit=%s…',
+            count($ordered),
+            $limit === null ? 'none (all)' : (string) $limit
+        ));
         $ok = 0;
         $skip = 0;
         $err = 0;
@@ -297,12 +322,23 @@ class FirestoreMigrationService
     {
         $folder = (string) config('firebase-migration.users_folder', 'users');
         $paths = $this->reader->jsonFiles($folder);
+        $totalFiles = count($paths);
+        $line(sprintf(
+            'Users: scanning %d JSON file(s)%s — this step often dominates runtime (set FIREBASE_MIGRATION_PROGRESS_INTERVAL or use --skip-media to speed up).',
+            $totalFiles,
+            $limit !== null ? ' (limited run)' : ' (full import for FK mapping in sample mode)'
+        ));
         $ok = 0;
         $skip = 0;
         $err = 0;
         $n = 0;
 
-        foreach ($paths as $path) {
+        foreach ($paths as $fileIndex => $path) {
+            if ($totalFiles <= 150) {
+                $line(sprintf('Users: file %d/%d (%s)…', $fileIndex + 1, $totalFiles, basename($path)));
+            } else {
+                $this->lineMigrationProgress($line, 'Users', $fileIndex + 1, $totalFiles);
+            }
             if ($limit !== null && $n >= $limit) {
                 break;
             }
@@ -721,12 +757,19 @@ class FirestoreMigrationService
     {
         $folder = (string) config('firebase-migration.stores_folder', 'stores');
         $paths = $this->reader->jsonFiles($folder);
+        $totalFiles = count($paths);
+        $line(sprintf(
+            'Stores: scanning up to %s of %d store JSON file(s)…',
+            $limit === null ? 'all' : (string) $limit,
+            $totalFiles
+        ));
         $ok = 0;
         $skip = 0;
         $err = 0;
         $n = 0;
 
-        foreach ($paths as $path) {
+        foreach ($paths as $fileIndex => $path) {
+            $this->lineMigrationProgress($line, 'Stores', $fileIndex + 1, $totalFiles);
             if ($limit !== null && $n >= $limit) {
                 break;
             }
@@ -1015,12 +1058,19 @@ class FirestoreMigrationService
     {
         $folder = (string) config('firebase-migration.listings_folder', 'listings');
         $paths = $this->reader->jsonFiles($folder);
+        $totalFiles = count($paths);
+        $line(sprintf(
+            'Listings: scanning up to %s of %d listing JSON file(s)…',
+            $limit === null ? 'all' : (string) $limit,
+            $totalFiles
+        ));
         $ok = 0;
         $skip = 0;
         $err = 0;
         $n = 0;
 
-        foreach ($paths as $path) {
+        foreach ($paths as $fileIndex => $path) {
+            $this->lineMigrationProgress($line, 'Listings', $fileIndex + 1, $totalFiles);
             if ($limit !== null && $n >= $limit) {
                 break;
             }
