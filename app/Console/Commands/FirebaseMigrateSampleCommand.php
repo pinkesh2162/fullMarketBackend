@@ -44,8 +44,8 @@ class FirebaseMigrateSampleCommand extends Command
 
         $totals = ['ok' => 0, 'skip' => 0, 'err' => 0];
         foreach ([
-            fn () => $migration->runCategories($limit, $dry, $skipMedia, $line),
             fn () => $migration->runUsers(null, $dry, $skipMedia, $line),
+            fn () => $migration->runCategories($limit, $dry, $skipMedia, $line),
             fn () => $migration->runStores($limit, $dry, $skipMedia, $line),
             fn () => $migration->runListings($limit, $dry, $skipMedia, $line),
             fn () => $migration->runFavorites($limit, $dry, $skipMedia, $line),

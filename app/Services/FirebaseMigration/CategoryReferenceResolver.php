@@ -20,13 +20,16 @@ class CategoryReferenceResolver
         'subcategory.id',
         'category.subcategoryid',
         'servicecategory.id',
-        'mainservicecategory',
         'categoryid',
         'category_id',
         'servicecategoryid',
         'category.id',
         'category.categoryid',
         'categorydocid',
+        // Snake_case alias used by some clients / exports (distinct from camelCase mainservicecategory key).
+        'main_service_category',
+        // Catalog slug (house-cleaning) — try after Firestore id paths; unmapped values skip via getCategoryId null.
+        'mainservicecategory',
     ];
 
     public function __construct(
@@ -47,8 +50,10 @@ class CategoryReferenceResolver
             if ($id === null) {
                 continue;
             }
-            // Strict rule: use first non-empty source key only.
-            return $this->state->getCategoryId($id);
+            $mapped = $this->state->getCategoryId($id);
+            if ($mapped !== null) {
+                return $mapped;
+            }
         }
 
         return null;

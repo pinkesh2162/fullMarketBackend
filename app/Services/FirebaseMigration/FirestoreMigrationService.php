@@ -2,8 +2,8 @@
 
 namespace App\Services\FirebaseMigration;
 
-use App\Models\Category;
 use App\Models\AppSetting;
+use App\Models\Category;
 use App\Models\Favorite;
 use App\Models\Listing;
 use App\Models\Rating;
@@ -66,7 +66,7 @@ class FirestoreMigrationService
 
         $totals = ['ok' => 0, 'skip' => 0, 'err' => 0];
 
-        foreach (['runCategories', 'runUsers', 'runStores', 'runListings', 'runFavorites', 'runReviews', 'runStoreFollowers', 'runSearchQueries', 'runAppConfig'] as $step) {
+        foreach (['runUsers', 'runCategories', 'runStores', 'runListings', 'runFavorites', 'runReviews', 'runStoreFollowers', 'runSearchQueries', 'runAppConfig'] as $step) {
             $r = $this->{$step}($limit, $dryRun, $skipMedia, $line);
             $totals['ok'] += $r['ok'];
             $totals['skip'] += $r['skip'];
@@ -81,23 +81,43 @@ class FirestoreMigrationService
      */
     public function runCategories(?int $limit, bool $dryRun, bool $skipMedia, callable $line): array
     {
-        $folder = (string) config('firebase-migration.categories_folder', 'categories');
-        $paths = $this->reader->jsonFiles($folder);
+        $folders = config('firebase-migration.category_source_folders');
+        if (! is_array($folders) || $folders === []) {
+            $folders = [(string) config('firebase-migration.categories_folder', 'categories')];
+        }
+
         $docs = [];
-        foreach ($paths as $path) {
-            $doc = $this->reader->readDocument($path);
-            if (! isset($doc['__id'], $doc['data']) || ! is_array($doc['data'])) {
-                $this->logger->skip('category', 'invalid_json', ['path' => $path]);
+        $foldersWithFiles = 0;
+        foreach ($folders as $folder) {
+            $folder = trim((string) $folder);
+            if ($folder === '') {
                 continue;
             }
-            $fbId = (string) $doc['__id'];
-            $docs[$fbId] = FirestoreDataNormalizer::utf8Recursive($doc['data']);
+            $paths = $this->reader->jsonFiles($folder);
+            if ($paths !== []) {
+                $foldersWithFiles++;
+            }
+            foreach ($paths as $path) {
+                $doc = $this->reader->readDocument($path);
+                if (! isset($doc['__id'], $doc['data']) || ! is_array($doc['data'])) {
+                    $this->logger->skip('category', 'invalid_json', ['path' => $path, 'folder' => $folder]);
+
+                    continue;
+                }
+                $fbId = (string) $doc['__id'];
+                if (isset($docs[$fbId])) {
+                    continue;
+                }
+                $docs[$fbId] = FirestoreDataNormalizer::utf8Recursive($doc['data']);
+            }
         }
 
         $ordered = $this->orderCategoriesForInsert($docs);
         $line(sprintf(
-            'Categories: %d document(s) in export, applying limit=%s…',
+            'Categories: %d document(s) from %d non-empty export folder(s) [%s], applying limit=%s…',
             count($ordered),
+            $foldersWithFiles,
+            implode(', ', $folders),
             $limit === null ? 'none (all)' : (string) $limit
         ));
         $ok = 0;
@@ -115,6 +135,7 @@ class FirestoreMigrationService
             $mapped = $this->state->getCategoryId($fbId);
             if ($mapped !== null && Category::query()->whereKey($mapped)->exists()) {
                 $skip++;
+
                 continue;
             }
             if ($mapped !== null && ! Category::query()->whereKey($mapped)->exists()) {
@@ -125,6 +146,7 @@ class FirestoreMigrationService
             if ($name === null) {
                 $this->logger->skip('category', 'empty_name', ['firebase_doc' => $fbId]);
                 $skip++;
+
                 continue;
             }
 
@@ -135,11 +157,15 @@ class FirestoreMigrationService
                 if ($parentLocal === null && isset($docs[$parentFb])) {
                     $this->logger->skip('category', 'parent_missing', ['firebase_doc' => $fbId, 'parent' => $parentFb]);
                     $skip++;
+
                     continue;
                 }
             }
 
-            $dedupKey = $this->categoryDedupKey($name, $parentLocal);
+            $ownerUid = $this->categoryFirestoreOwnerUid($d);
+            $ownerLocalUserId = $this->resolveCategoryOwnerLocalUserId($ownerUid);
+
+            $dedupKey = $this->categoryDedupKey($name, $parentLocal, $ownerLocalUserId);
             $existingDedup = $this->state->getCategoryDedupLocalId($dedupKey);
             if ($existingDedup !== null && Category::query()->whereKey($existingDedup)->exists()) {
                 $this->state->setCategoryId($fbId, $existingDedup);
@@ -147,19 +173,26 @@ class FirestoreMigrationService
                     $this->state->save();
                 }
                 $skip++;
+
                 continue;
             }
 
             if ($dryRun) {
                 $ok++;
+
                 continue;
             }
 
             try {
+                $slugForDb = $this->uniqueCategorySlugForInsert(
+                    FirestoreDataNormalizer::trimString($d['slug'] ?? null)
+                );
+
                 $cat = Category::query()->create([
                     'firebase_id' => $fbId,
-                    'user_id' => null,
+                    'user_id' => $ownerLocalUserId,
                     'name' => $name,
+                    'slug' => $slugForDb,
                     'parent_id' => $parentLocal,
                 ]);
                 $ts = $this->categoryTimestamps($d);
@@ -260,11 +293,48 @@ class FirestoreMigrationService
         return null;
     }
 
-    protected function categoryDedupKey(string $name, ?int $parentLocalId): string
+    protected function categoryDedupKey(string $name, ?int $parentLocalId, ?int $ownerUserId = null): string
     {
         $n = strtolower(trim(preg_replace('/\s+/u', ' ', $name) ?? ''));
 
-        return $n.'|'.($parentLocalId ?? 0);
+        return $n.'|'.($parentLocalId ?? 0).'|'.($ownerUserId ?? 0);
+    }
+
+    /**
+     * @param  array<string, mixed>  $d
+     */
+    protected function categoryFirestoreOwnerUid(array $d): ?string
+    {
+        foreach ([
+            'userId', 'user_id', 'ownerId', 'owner_id', 'createdBy', 'authorId', 'author_id',
+            'ownerUID', 'uid', 'userUID',
+        ] as $k) {
+            $t = FirestoreDataNormalizer::trimString($d[$k] ?? null);
+            if ($t !== null) {
+                return $t;
+            }
+        }
+
+        $nested = FirestoreDataNormalizer::trimString(data_get($d, 'owner.id') ?? data_get($d, 'user.id') ?? null);
+
+        return $nested;
+    }
+
+    protected function resolveCategoryOwnerLocalUserId(?string $ownerFirebaseUid): ?int
+    {
+        if ($ownerFirebaseUid === null || $ownerFirebaseUid === '') {
+            return null;
+        }
+
+        $mapped = $this->state->getUserId($ownerFirebaseUid);
+        if ($mapped !== null) {
+            return (int) $mapped;
+        }
+
+        $id = User::query()->where('firebase_id', $ownerFirebaseUid)->value('id')
+            ?? User::query()->where('provider_id', $ownerFirebaseUid)->value('id');
+
+        return $id !== null ? (int) $id : null;
     }
 
     /**
@@ -346,6 +416,7 @@ class FirestoreMigrationService
             if (! isset($doc['__id'], $doc['data']) || ! is_array($doc['data'])) {
                 $this->logger->skip('user', 'invalid_json', ['path' => $path]);
                 $err++;
+
                 continue;
             }
             $fbUid = (string) $doc['__id'];
@@ -355,6 +426,7 @@ class FirestoreMigrationService
             $mapped = $this->state->getUserId($fbUid);
             if ($mapped !== null && User::query()->whereKey($mapped)->exists()) {
                 $skip++;
+
                 continue;
             }
 
@@ -364,6 +436,7 @@ class FirestoreMigrationService
             if ($email === null) {
                 $this->logger->skip('user', 'missing_email', ['firebase_uid' => $fbUid]);
                 $skip++;
+
                 continue;
             }
 
@@ -371,11 +444,13 @@ class FirestoreMigrationService
             if ($first === null || $first === '') {
                 $this->logger->skip('user', 'empty_first_name', ['firebase_uid' => $fbUid, 'email' => $email]);
                 $skip++;
+
                 continue;
             }
 
             if ($dryRun) {
                 $ok++;
+
                 continue;
             }
 
@@ -422,6 +497,7 @@ class FirestoreMigrationService
                     $this->state->save();
                     $this->syncUserSettings((int) $existing->id, $d, $dryRun);
                     $ok++;
+
                     continue;
                 }
 
@@ -581,9 +657,6 @@ class FirestoreMigrationService
         return $out === [] ? null : $out;
     }
 
-    /**
-     * @param  int|float|string  $v
-     */
     protected function locationCoordinateToString(int|float|string $v): string
     {
         if (is_string($v)) {
@@ -743,9 +816,6 @@ class FirestoreMigrationService
         return null;
     }
 
-    /**
-     * @param  mixed  $locations
-     */
     protected function userLocationFromLocations(mixed $locations): ?array
     {
         if (! is_array($locations) || $locations === []) {
@@ -755,6 +825,7 @@ class FirestoreMigrationService
         if (! is_array($first)) {
             return null;
         }
+
         return $this->normalizedLocationPayload(
             $first,
             ['description', 'name', 'address'],
@@ -851,6 +922,7 @@ class FirestoreMigrationService
             if (! isset($doc['__id'], $doc['data']) || ! is_array($doc['data'])) {
                 $this->logger->skip('store', 'invalid_json', ['path' => $path]);
                 $err++;
+
                 continue;
             }
             $fbDocId = (string) $doc['__id'];
@@ -861,6 +933,7 @@ class FirestoreMigrationService
             if ($ownerUid === null) {
                 $this->logger->skip('store', 'missing_owner', ['firebase_doc' => $fbDocId]);
                 $skip++;
+
                 continue;
             }
 
@@ -871,6 +944,7 @@ class FirestoreMigrationService
             if ($userId === null) {
                 $this->logger->skip('store', 'user_not_found', ['firebase_doc' => $fbDocId, 'owner' => $ownerUid]);
                 $skip++;
+
                 continue;
             }
             $userId = (int) $userId;
@@ -878,6 +952,7 @@ class FirestoreMigrationService
             $mapped = $this->state->getStoreIdByDocId($fbDocId);
             if ($mapped !== null && Store::query()->whereKey($mapped)->exists()) {
                 $skip++;
+
                 continue;
             }
 
@@ -885,11 +960,13 @@ class FirestoreMigrationService
             if ($name === null) {
                 $this->logger->skip('store', 'empty_name', ['firebase_doc' => $fbDocId]);
                 $skip++;
+
                 continue;
             }
 
             if ($dryRun) {
                 $ok++;
+
                 continue;
             }
 
@@ -900,6 +977,7 @@ class FirestoreMigrationService
                     $this->state->setStoreIdByOwnerUid($ownerUid, (int) $existing->id);
                     $this->state->save();
                     $skip++;
+
                     continue;
                 }
 
@@ -969,7 +1047,6 @@ class FirestoreMigrationService
     }
 
     /**
-     * @param  mixed  $loc
      * @return array<string, mixed>|null
      */
     protected function storeLocationStructured(mixed $loc): ?array
@@ -1152,6 +1229,7 @@ class FirestoreMigrationService
             if (! isset($doc['__id'], $doc['data']) || ! is_array($doc['data'])) {
                 $this->logger->skip('listing', 'invalid_json', ['path' => $path]);
                 $err++;
+
                 continue;
             }
             $fbId = (string) $doc['__id'];
@@ -1167,6 +1245,7 @@ class FirestoreMigrationService
                         $listing->restore();
                     }
                     $skip++;
+
                     continue;
                 }
 
@@ -1178,6 +1257,7 @@ class FirestoreMigrationService
             if ($ownerUid === null) {
                 $this->logger->skip('listing', 'missing_ownerId', ['firebase_doc' => $fbId]);
                 $skip++;
+
                 continue;
             }
 
@@ -1188,6 +1268,7 @@ class FirestoreMigrationService
             if ($userId === null) {
                 $this->logger->skip('listing', 'user_not_found', ['firebase_doc' => $fbId, 'owner' => $ownerUid]);
                 $skip++;
+
                 continue;
             }
             $userId = (int) $userId;
@@ -1204,6 +1285,19 @@ class FirestoreMigrationService
 
             $categoryId = $this->categoryResolver->resolveLocalCategoryId($d);
             if ($categoryId === null) {
+                $categoryId = $this->resolveListingCategoryFromExportFields($d);
+            }
+            $listingCustomCategoryToken = $this->listingMainServiceCategoryOrCategoryIdToken($d);
+            if ($categoryId === null && $listingCustomCategoryToken !== null && str_starts_with($listingCustomCategoryToken, 'custom_service')) {
+                // Resolve user custom categories before global name match so we never attach a global row by accident.
+                $categoryId = $this->resolveOrCreateListingCategoryFromExportPayload($d, $userId, $dryRun);
+            } elseif ($categoryId === null) {
+                $categoryId = $this->resolveCategoryFromListingName($d, $dryRun);
+            }
+            if ($categoryId === null) {
+                $categoryId = $this->resolveOrCreateListingCategoryFromExportPayload($d, $userId, $dryRun);
+            }
+            if ($categoryId === null) {
                 $this->logger->skip('listing', 'unresolved_category', ['firebase_doc' => $fbId]);
             }
             if ($categoryId !== null && ! Category::query()->whereKey($categoryId)->exists()) {
@@ -1218,6 +1312,7 @@ class FirestoreMigrationService
 
             if ($dryRun) {
                 $ok++;
+
                 continue;
             }
 
@@ -1322,6 +1417,7 @@ class FirestoreMigrationService
             if (! isset($doc['__id'], $doc['data']) || ! is_array($doc['data'])) {
                 $this->logger->skip('favorite', 'invalid_json', ['path' => $path]);
                 $err++;
+
                 continue;
             }
 
@@ -1333,6 +1429,7 @@ class FirestoreMigrationService
             if ($itemType !== '' && $itemType !== 'listing') {
                 $this->logger->skip('favorite', 'unsupported_item_type', ['firebase_doc' => $fbId, 'item_type' => $itemType]);
                 $skip++;
+
                 continue;
             }
 
@@ -1342,6 +1439,7 @@ class FirestoreMigrationService
             if ($fbUserId === null || $fbListingId === null) {
                 $this->logger->skip('favorite', 'missing_user_or_listing_id', ['firebase_doc' => $fbId]);
                 $skip++;
+
                 continue;
             }
 
@@ -1362,6 +1460,7 @@ class FirestoreMigrationService
             if ($userId === null) {
                 $this->logger->skip('favorite', 'user_not_found', ['firebase_doc' => $fbId, 'firebase_user' => $fbUserId]);
                 $skip++;
+
                 continue;
             }
 
@@ -1387,6 +1486,7 @@ class FirestoreMigrationService
                 if ($dryRun) {
                     $this->logger->skip('favorite', 'listing_not_found', ['firebase_doc' => $fbId, 'firebase_listing' => $fbListingId]);
                     $skip++;
+
                     continue;
                 }
                 try {
@@ -1430,6 +1530,7 @@ class FirestoreMigrationService
                 } catch (Throwable) {
                     $this->logger->skip('favorite', 'listing_not_found', ['firebase_doc' => $fbId, 'firebase_listing' => $fbListingId]);
                     $skip++;
+
                     continue;
                 }
             }
@@ -1440,6 +1541,7 @@ class FirestoreMigrationService
 
             if ($dryRun) {
                 $ok++;
+
                 continue;
             }
 
@@ -1506,6 +1608,7 @@ class FirestoreMigrationService
             if (! isset($doc['__id'], $doc['data']) || ! is_array($doc['data'])) {
                 $this->logger->skip('app_config', 'invalid_json', ['path' => $path]);
                 $err++;
+
                 continue;
             }
 
@@ -1516,6 +1619,7 @@ class FirestoreMigrationService
             // We only migrate the app settings payload used by clients for version/maintenance.
             if ($docId !== 'version_and_maintenance') {
                 $skip++;
+
                 continue;
             }
 
@@ -1580,6 +1684,7 @@ class FirestoreMigrationService
             if (! isset($doc['__id'], $doc['data']) || ! is_array($doc['data'])) {
                 $this->logger->skip('search_query', 'invalid_json', ['path' => $path]);
                 $err++;
+
                 continue;
             }
 
@@ -1591,6 +1696,7 @@ class FirestoreMigrationService
             if ($term === null) {
                 $this->logger->skip('search_query', 'missing_query', ['firebase_doc' => (string) ($doc['__id'] ?? '')]);
                 $skip++;
+
                 continue;
             }
 
@@ -1598,6 +1704,7 @@ class FirestoreMigrationService
 
             if ($dryRun) {
                 $ok++;
+
                 continue;
             }
 
@@ -1645,6 +1752,7 @@ class FirestoreMigrationService
             if (! isset($doc['__id'], $doc['data']) || ! is_array($doc['data'])) {
                 $this->logger->skip('store_follower', 'invalid_json', ['path' => $path]);
                 $err++;
+
                 continue;
             }
 
@@ -1657,6 +1765,7 @@ class FirestoreMigrationService
             if ($followerUid === null || $ownerUid === null) {
                 $this->logger->skip('store_follower', 'missing_user_or_owner', ['firebase_doc' => $fbDocId]);
                 $skip++;
+
                 continue;
             }
 
@@ -1670,6 +1779,7 @@ class FirestoreMigrationService
             if ($userId === null) {
                 $this->logger->skip('store_follower', 'follower_not_found', ['firebase_doc' => $fbDocId, 'follower' => $followerUid]);
                 $skip++;
+
                 continue;
             }
             $userId = (int) $userId;
@@ -1690,6 +1800,7 @@ class FirestoreMigrationService
             if ($storeId === null) {
                 $this->logger->skip('store_follower', 'store_not_found', ['firebase_doc' => $fbDocId, 'owner' => $ownerUid]);
                 $skip++;
+
                 continue;
             }
             $storeId = (int) $storeId;
@@ -1700,6 +1811,7 @@ class FirestoreMigrationService
 
             if ($dryRun) {
                 $ok++;
+
                 continue;
             }
 
@@ -1744,6 +1856,7 @@ class FirestoreMigrationService
             if (! isset($doc['__id'], $doc['data']) || ! is_array($doc['data'])) {
                 $this->logger->skip('review', 'invalid_json', ['path' => $path]);
                 $err++;
+
                 continue;
             }
 
@@ -1755,6 +1868,7 @@ class FirestoreMigrationService
             if ($reviewerUid === null) {
                 $this->logger->skip('review', 'missing_reviewer', ['firebase_doc' => $fbId]);
                 $skip++;
+
                 continue;
             }
 
@@ -1768,6 +1882,7 @@ class FirestoreMigrationService
             if ($userId === null) {
                 $this->logger->skip('review', 'user_not_found', ['firebase_doc' => $fbId, 'firebase_user' => $reviewerUid]);
                 $skip++;
+
                 continue;
             }
             $userId = (int) $userId;
@@ -1777,6 +1892,7 @@ class FirestoreMigrationService
             if ($targetId === null) {
                 $this->logger->skip('review', 'missing_target', ['firebase_doc' => $fbId]);
                 $skip++;
+
                 continue;
             }
 
@@ -1803,6 +1919,7 @@ class FirestoreMigrationService
                     'target_id' => $targetId,
                 ]);
                 $skip++;
+
                 continue;
             }
 
@@ -1819,6 +1936,7 @@ class FirestoreMigrationService
 
             if ($dryRun) {
                 $ok++;
+
                 continue;
             }
 
@@ -2408,6 +2526,7 @@ class FirestoreMigrationService
                     if (is_string($item) && trim($item) !== '') {
                         $rows[] = ['source' => $sourceIndex, 'order' => 0, 'url' => trim($item)];
                     }
+
                     continue;
                 }
                 $u = $item['url'] ?? $item['src'] ?? null;
@@ -2446,20 +2565,215 @@ class FirestoreMigrationService
     }
 
     /**
-     * Fallback by exact category name match only; never create guessed categories.
+     * Match catalog slug or Firestore category id string against imported rows (slug / firebase_id columns).
+     */
+    protected function resolveListingCategoryFromExportFields(array $d): ?int
+    {
+        foreach ($this->listingCategoryReferenceCandidates($d) as $candidate) {
+            if ($candidate === '' || str_starts_with($candidate, 'custom_service')) {
+                continue;
+            }
+            if (strlen($candidate) >= 18 && preg_match('/^[A-Za-z0-9]+$/', $candidate)) {
+                $byFb = Category::query()->where('firebase_id', $candidate)->value('id');
+                if ($byFb !== null) {
+                    return (int) $byFb;
+                }
+            }
+            $bySlug = Category::query()->where('slug', $candidate)->value('id');
+            if ($bySlug !== null) {
+                return (int) $bySlug;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function listingCategoryReferenceCandidates(array $d): array
+    {
+        $categories = $d['categories'] ?? null;
+        $firstCategorySlug = null;
+        if (is_array($categories) && $categories !== []) {
+            $first = $categories[0];
+            if (is_string($first)) {
+                $firstCategorySlug = FirestoreDataNormalizer::trimString($first);
+            }
+        }
+
+        $raw = [
+            $d['mainServiceCategory'] ?? null,
+            $d['main_service_category'] ?? null,
+            data_get($d, 'custom_fields.main_service_category'),
+            data_get($d, 'customFields.main_service_category'),
+            data_get($d, 'customFields.mainServiceCategory'),
+            $d['serviceCategoryId'] ?? null,
+            $d['service_category_id'] ?? null,
+            $firstCategorySlug,
+            $d['categoryId'] ?? null,
+            $d['category_id'] ?? null,
+        ];
+        $out = [];
+        foreach ($raw as $v) {
+            $s = FirestoreDataNormalizer::trimString(is_string($v) ? $v : null);
+            if ($s !== null && $s !== '') {
+                $out[] = $s;
+            }
+        }
+
+        return array_values(array_unique($out));
+    }
+
+    /**
+     * When the bundled category export is incomplete, or the listing uses custom_service_*,
+     * ensure a Category row exists so the API can show the same label as live.
+     */
+    protected function resolveOrCreateListingCategoryFromExportPayload(array $d, int $userId, bool $dryRun): ?int
+    {
+        if ($dryRun) {
+            return null;
+        }
+
+        $msc = $this->listingMainServiceCategoryOrCategoryIdToken($d);
+        if ($msc === null || $msc === '') {
+            return null;
+        }
+
+        if (str_starts_with($msc, 'custom_service')) {
+            $nm = FirestoreDataNormalizer::trimString(
+                data_get($d, 'custom_fields.main_service_category_name')
+                ?? data_get($d, 'customFields.main_service_category_name')
+                ?? $d['mainServiceCategoryDisplayName']
+                ?? null
+            );
+            if ($nm === null || $nm === '') {
+                $nm = $this->firstNonEmptyListingCategoryDisplayName($d);
+            }
+            if ($nm === null || $nm === '') {
+                $nm = 'Custom service';
+            }
+
+            $cat = Category::query()->updateOrCreate(
+                ['firebase_id' => Str::limit($msc, 255)],
+                [
+                    'user_id' => $userId,
+                    'name' => Str::limit($nm, 255),
+                    'slug' => null,
+                    'parent_id' => null,
+                ]
+            );
+
+            return (int) $cat->id;
+        }
+
+        $slug = $this->listingPrimaryCatalogSlugToken($d);
+        if ($slug === null) {
+            return null;
+        }
+
+        $existing = Category::query()->where('slug', $slug)->value('id');
+        if ($existing !== null) {
+            return (int) $existing;
+        }
+
+        $display = $this->firstNonEmptyListingCategoryDisplayName($d);
+        if ($display === null) {
+            return null;
+        }
+
+        $cat = Category::query()->firstOrCreate(
+            ['slug' => $slug],
+            [
+                'firebase_id' => null,
+                'user_id' => null,
+                'name' => Str::limit($display, 255),
+                'parent_id' => null,
+            ]
+        );
+
+        return (int) $cat->id;
+    }
+
+    /**
+     * Listing payload often puts the catalog slug under main_service_category, but user-created
+     * services may only set top-level categoryId / category_id to custom_service_* or custom_service_temp_*.
+     */
+    protected function listingMainServiceCategoryOrCategoryIdToken(array $d): ?string
+    {
+        $direct = FirestoreDataNormalizer::trimString(
+            data_get($d, 'custom_fields.main_service_category')
+            ?? data_get($d, 'customFields.main_service_category')
+            ?? $d['mainServiceCategory']
+            ?? $d['main_service_category']
+            ?? null
+        );
+        $customTokens = [];
+        if ($direct !== null && $direct !== '') {
+            $customTokens[] = $direct;
+        }
+        foreach ($this->listingCategoryReferenceCandidates($d) as $c) {
+            if (str_starts_with($c, 'custom_service')) {
+                $customTokens[] = $c;
+            }
+        }
+        $customTokens = array_values(array_unique($customTokens));
+        foreach ($customTokens as $c) {
+            if (str_starts_with($c, 'custom_service_') && ! str_starts_with($c, 'custom_service_temp_')) {
+                return $c;
+            }
+        }
+        foreach ($customTokens as $c) {
+            if (str_starts_with($c, 'custom_service_temp_')) {
+                return $c;
+            }
+        }
+        if ($direct !== null && $direct !== '') {
+            return $direct;
+        }
+
+        return null;
+    }
+
+    /**
+     * First token that looks like a catalog slug (not a Firestore doc id, not custom_service_*).
+     */
+    protected function listingPrimaryCatalogSlugToken(array $d): ?string
+    {
+        foreach ($this->listingCategoryReferenceCandidates($d) as $c) {
+            if ($c === '' || str_starts_with($c, 'custom_service')) {
+                continue;
+            }
+            if (strlen($c) >= 18 && preg_match('/^[A-Za-z0-9]+$/', $c)) {
+                continue;
+            }
+
+            return Str::limit($c, 191);
+        }
+
+        return null;
+    }
+
+    protected function uniqueCategorySlugForInsert(?string $slug): ?string
+    {
+        if ($slug === null || $slug === '') {
+            return null;
+        }
+        $slug = Str::limit($slug, 191, '');
+        if (Category::query()->where('slug', $slug)->exists()) {
+            return null;
+        }
+
+        return $slug;
+    }
+
+    /**
+     * Prefer specific labels over generic "Other"; skip empty display strings so later keys apply.
+     * Exact name match (any depth), prefer root.
      */
     protected function resolveCategoryFromListingName(array $d, bool $dryRun): ?int
     {
-        $name = FirestoreDataNormalizer::trimString(
-            // Prefer specific service category labels over generic category fields like "Other".
-            data_get($d, 'custom_fields.main_service_category_name')
-            ?? data_get($d, 'customFields.main_service_category_name')
-            ?? $d['mainServiceCategoryDisplayName']
-            ?? $d['main_service_category_name']
-            ?? $d['categoryName']
-            ?? $d['category_name']
-            ?? null
-        );
+        $name = $this->firstNonEmptyListingCategoryDisplayName($d);
         if ($name === null) {
             return null;
         }
@@ -2470,13 +2784,46 @@ class FirestoreMigrationService
         }
 
         $existing = Category::query()
-            ->whereRaw('LOWER(name) = ?', [$normalized])
-            ->whereNull('parent_id')
+            ->whereRaw('LOWER(TRIM(name)) = ?', [$normalized])
+            ->orderByRaw('CASE WHEN parent_id IS NULL THEN 0 ELSE 1 END')
+            ->orderBy('id')
             ->value('id');
         if ($existing !== null) {
             return (int) $existing;
         }
-        
+
+        return null;
+    }
+
+    protected function firstNonEmptyListingCategoryDisplayName(array $d): ?string
+    {
+        $candidates = [
+            data_get($d, 'custom_fields.main_service_category_name'),
+            data_get($d, 'customFields.main_service_category_name'),
+            $d['mainServiceCategoryDisplayName'] ?? null,
+            $d['main_service_category_name'] ?? null,
+            $d['categoryName'] ?? null,
+            $d['category_name'] ?? null,
+        ];
+        foreach ($candidates as $v) {
+            $t = FirestoreDataNormalizer::trimString(is_string($v) ? $v : null);
+            if ($t === null) {
+                continue;
+            }
+            if (strtolower($t) === 'other') {
+                continue;
+            }
+
+            return $t;
+        }
+
+        foreach ([$d['categoryName'] ?? null, $d['category_name'] ?? null] as $v) {
+            $t = FirestoreDataNormalizer::trimString(is_string($v) ? $v : null);
+            if ($t !== null) {
+                return $t;
+            }
+        }
+
         return null;
     }
 }
