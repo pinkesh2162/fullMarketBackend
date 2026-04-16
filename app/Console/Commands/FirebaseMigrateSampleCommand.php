@@ -13,7 +13,6 @@ class FirebaseMigrateSampleCommand extends Command
     protected $signature = 'firebase:migrate:sample
                             {--dry-run : Validate and log only; no database writes}
                             {--skip-media : Do not download images into Spatie media}
-                            {--only-favorites : Run only favorites migration (expects users/listings already imported)}
                             {--exports-path= : Override firebase-migration.exports_path}';
 
     protected $description = 'Import a small sample (25 records per collection) from Firestore JSON exports';
@@ -32,27 +31,17 @@ class FirebaseMigrateSampleCommand extends Command
         $limit = (int) config('firebase-migration.sample_limit', 25);
         $dry = (bool) $this->option('dry-run');
         $skipMedia = (bool) $this->option('skip-media');
-        $onlyFavorites = (bool) $this->option('only-favorites');
 
-        $this->info('Firebase migration (sample, limit='.$limit.' for categories/stores/listings/favorites; users imported fully for FK mapping)…');
+        $this->info('Firebase migration (sample, limit='.$limit.' for categories/stores/listings; users imported fully for FK mapping)…');
         $line = fn (string $m) => $this->line($m);
 
         $totals = ['ok' => 0, 'skip' => 0, 'err' => 0];
-        $steps = $onlyFavorites
-            ? [fn () => $migration->runFavorites($limit, $dry, $skipMedia, $line)]
-            : [
-                fn () => $migration->runCategories($limit, $dry, $skipMedia, $line),
-                fn () => $migration->runUsers(null, $dry, $skipMedia, $line),
-                fn () => $migration->runStores($limit, $dry, $skipMedia, $line),
-                fn () => $migration->runListings($limit, $dry, $skipMedia, $line),
-                fn () => $migration->runFavorites($limit, $dry, $skipMedia, $line),
-            ];
-
-        if ($onlyFavorites) {
-            $this->warn('Running favorites only. Make sure users and listings are already migrated in DB.');
-        }
-
-        foreach ($steps as $step) {
+        foreach ([
+            fn () => $migration->runCategories($limit, $dry, $skipMedia, $line),
+            fn () => $migration->runUsers(null, $dry, $skipMedia, $line),
+            fn () => $migration->runStores($limit, $dry, $skipMedia, $line),
+            fn () => $migration->runListings($limit, $dry, $skipMedia, $line),
+        ] as $step) {
             $r = $step();
             $totals['ok'] += $r['ok'];
             $totals['skip'] += $r['skip'];
