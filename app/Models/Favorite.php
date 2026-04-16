@@ -19,6 +19,7 @@ class Favorite extends Pivot
      */
     protected $fillable = [
       'user_id',
-      'listing_id'
+      'listing_id',
+      'firebase_id'
     ];
 }

@@ -27,6 +27,16 @@ return [
 
     'listings_folder' => env('FIREBASE_MIGRATION_LISTINGS_FOLDER', 'listings'),
 
+    'favorites_folder' => env('FIREBASE_MIGRATION_FAVORITES_FOLDER', 'favorites'),
+
+    'reviews_folder' => env('FIREBASE_MIGRATION_REVIEWS_FOLDER', 'reviews'),
+
+    'search_queries_folder' => env('FIREBASE_MIGRATION_SEARCH_QUERIES_FOLDER', 'search_queries'),
+
+    'store_followers_folder' => env('FIREBASE_MIGRATION_STORE_FOLLOWERS_FOLDER', 'store_followers'),
+
+    'app_config_folder' => env('FIREBASE_MIGRATION_APP_CONFIG_FOLDER', 'app_config'),
+
     /*
     | Pre-hashed bcrypt for all imported Firebase users (plain-text is never stored).
     */

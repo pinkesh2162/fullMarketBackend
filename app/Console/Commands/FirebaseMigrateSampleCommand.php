@@ -32,7 +32,7 @@ class FirebaseMigrateSampleCommand extends Command
         $dry = (bool) $this->option('dry-run');
         $skipMedia = (bool) $this->option('skip-media');
 
-        $this->info('Firebase migration (sample, limit='.$limit.' for categories/stores/listings; users imported fully for FK mapping)…');
+        $this->info('Firebase migration (sample, limit='.$limit.' for categories/stores/listings/favorites/reviews/store_followers/search_queries + app_config; users imported fully for FK mapping)…');
         $line = fn (string $m) => $this->line($m);
 
         $totals = ['ok' => 0, 'skip' => 0, 'err' => 0];
@@ -41,6 +41,11 @@ class FirebaseMigrateSampleCommand extends Command
             fn () => $migration->runUsers(null, $dry, $skipMedia, $line),
             fn () => $migration->runStores($limit, $dry, $skipMedia, $line),
             fn () => $migration->runListings($limit, $dry, $skipMedia, $line),
+            fn () => $migration->runFavorites($limit, $dry, $skipMedia, $line),
+            fn () => $migration->runReviews($limit, $dry, $skipMedia, $line),
+            fn () => $migration->runStoreFollowers($limit, $dry, $skipMedia, $line),
+            fn () => $migration->runSearchQueries($limit, $dry, $skipMedia, $line),
+            fn () => $migration->runAppConfig($limit, $dry, $skipMedia, $line),
         ] as $step) {
             $r = $step();
             $totals['ok'] += $r['ok'];

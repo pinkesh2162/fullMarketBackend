@@ -15,7 +15,7 @@ class FirebaseMigrateFullCommand extends Command
                             {--skip-media : Do not download images into Spatie media}
                             {--exports-path= : Override firebase-migration.exports_path}';
 
-    protected $description = 'Import all data from Firestore JSON exports (categories → users → stores → listings)';
+    protected $description = 'Import all data from Firestore JSON exports (categories → users → stores → listings → favorites → reviews → store_followers → search_queries → app_config)';
 
     public function handle(FirestoreMigrationService $migration): int
     {

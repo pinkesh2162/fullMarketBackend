@@ -16,6 +16,7 @@ class Category extends Model implements HasMedia
     use HasFactory, InteractsWithMedia;
 
     protected $fillable = [
+        'firebase_id',
         'user_id',
         'name',
         'parent_id',
@@ -23,33 +24,21 @@ class Category extends Model implements HasMedia
 
     const CATEGORY_IMAGE = 'category_image';
 
-    /**
-     * @return BelongsTo
-     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    /**
-     * @return BelongsTo
-     */
     public function parent(): BelongsTo
     {
         return $this->belongsTo(Category::class, 'parent_id');
     }
 
-    /**
-     * @return HasMany
-     */
     public function subCategories(): HasMany
     {
         return $this->hasMany(Category::class, 'parent_id');
     }
 
-    /**
-     * @return HasMany
-     */
     public function listings(): HasMany
     {
         return $this->hasMany(Listing::class, 'service_category');

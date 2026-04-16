@@ -18,6 +18,8 @@ class UserSetting extends Model
         'follow_request',
         'notification_time_start',
         'notification_time_end',
+        'created_at',
+        'updated_at',
     ];
 
     protected $casts = [

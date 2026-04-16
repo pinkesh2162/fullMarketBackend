@@ -24,6 +24,7 @@ class User extends Authenticatable implements HasMedia
      */
     protected $fillable = [
         'unique_key',
+        'firebase_id',
         'first_name',
         'last_name',
         'email',
@@ -41,6 +42,7 @@ class User extends Authenticatable implements HasMedia
         'email_verified_at',
         'fcm_token',
         'data',
+        'deleted_at',
     ];
 
     const PROFILE = 'user';
@@ -67,14 +69,20 @@ class User extends Authenticatable implements HasMedia
      *
      * @return array<string, string>
      */
-    protected function casts(): array
-    {
-        return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-            'location' => 'array',
-        ];
-    }
+    // protected function casts(): array
+    // {
+    //     return [
+    //         'email_verified_at' => 'datetime',
+    //         'password' => 'hashed',
+    //         'location' => 'array',
+    //     ];
+    // }
+
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+        'password' => 'hashed',
+        'location' => 'array',
+    ];
 
     public function getProfilePhotoAttribute()
     {

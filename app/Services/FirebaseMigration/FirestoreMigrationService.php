@@ -3,12 +3,17 @@
 namespace App\Services\FirebaseMigration;
 
 use App\Models\Category;
+use App\Models\AppSetting;
+use App\Models\Favorite;
 use App\Models\Listing;
+use App\Models\Rating;
+use App\Models\SearchSuggestion;
 use App\Models\Store;
 use App\Models\User;
 use App\Models\UserSetting;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -29,7 +34,7 @@ class FirestoreMigrationService
 
     protected function passwordHash(): string
     {
-        return (string) config('firebase-migration.imported_user_password_hash');
+        return Hash::make('Test@1234');
     }
 
     /**
@@ -41,7 +46,7 @@ class FirestoreMigrationService
 
         $totals = ['ok' => 0, 'skip' => 0, 'err' => 0];
 
-        foreach (['runCategories', 'runUsers', 'runStores', 'runListings'] as $step) {
+        foreach (['runCategories', 'runUsers', 'runStores', 'runListings', 'runFavorites', 'runReviews', 'runStoreFollowers', 'runSearchQueries', 'runAppConfig'] as $step) {
             $r = $this->{$step}($limit, $dryRun, $skipMedia, $line);
             $totals['ok'] += $r['ok'];
             $totals['skip'] += $r['skip'];
@@ -127,6 +132,7 @@ class FirestoreMigrationService
 
             try {
                 $cat = Category::query()->create([
+                    'firebase_id' => $fbId,
                     'user_id' => null,
                     'name' => $name,
                     'parent_id' => $parentLocal,
@@ -344,6 +350,7 @@ class FirestoreMigrationService
                 if ($existing !== null) {
                     $existing->mergeCasts(['password' => 'string']);
                     $existing->fill([
+                        'firebase_id' => $fbUid,
                         'first_name' => $payload['first_name'],
                         'last_name' => $payload['last_name'],
                         'email' => $email,
@@ -385,6 +392,7 @@ class FirestoreMigrationService
                 $user = new User;
                 $user->mergeCasts(['password' => 'string']);
                 $user->fill([
+                    'firebase_id' => $fbUid,
                     'first_name' => $payload['first_name'],
                     'last_name' => $payload['last_name'],
                     'email' => $email,
@@ -464,10 +472,13 @@ class FirestoreMigrationService
         );
         $lang = FirestoreDataNormalizer::trimString($prefs['language'] ?? $d['lang'] ?? null) ?? 'en';
         $currency = FirestoreDataNormalizer::trimString($prefs['currency'] ?? null);
+        $hasEmailVerifiedFlag = array_key_exists('email_verified', $d) || array_key_exists('emailVerified', $d);
         $verified = FirestoreDataNormalizer::truthy($d['email_verified'] ?? $d['emailVerified'] ?? null);
         $created = FirestoreDataNormalizer::parseTimestamp($d['createdAt'] ?? $d['createdat'] ?? null);
         $updated = FirestoreDataNormalizer::parseTimestamp($d['updatedAt'] ?? $d['updatedat'] ?? null);
-        $emailVerifiedAt = $verified ? ($created ?? $updated) : null;
+        $emailVerifiedAt = $hasEmailVerifiedFlag
+            ? ($verified ? ($created ?? now()) : null)
+            : now();
         [$provider, $providerId] = $this->providerFromFirebaseUser($firebaseUid, $d);
 
         return [
@@ -780,6 +791,7 @@ class FirestoreMigrationService
                 $updated = FirestoreDataNormalizer::parseTimestamp($d['updatedAt'] ?? $d['updatedat'] ?? null);
 
                 $store = Store::query()->create([
+                    'firebase_id' => $fbDocId,
                     'user_id' => $userId,
                     'name' => Str::limit($name, 255, ''),
                     'location' => $loc,
@@ -1023,13 +1035,19 @@ class FirestoreMigrationService
             $n++;
 
             $mapped = $this->state->getListingId($fbId);
-            if ($mapped !== null && Listing::withTrashed()->whereKey($mapped)->exists()) {
+            if ($mapped !== null) {
                 $listing = Listing::withTrashed()->find($mapped);
-                if ($listing && $listing->trashed()) {
-                    $listing->restore();
+                $mappedFirebaseId = $listing?->firebase_id !== null ? trim((string) $listing->firebase_id) : null;
+                if ($listing !== null && $mappedFirebaseId === $fbId) {
+                    if ($listing->trashed()) {
+                        $listing->restore();
+                    }
+                    $skip++;
+                    continue;
                 }
-                $skip++;
-                continue;
+
+                // Stale mapping: firebase listing id points to a different local row.
+                $this->state->forgetListing($fbId);
             }
 
             $ownerUid = FirestoreDataNormalizer::trimString($d['ownerId'] ?? $d['owner_id'] ?? null);
@@ -1056,28 +1074,22 @@ class FirestoreMigrationService
                 $storeId = null;
             }
             if ($storeId === null) {
+                // Store is optional in our schema; keep listing import even if owner store is missing.
                 $this->logger->skip('listing', 'store_not_found', ['firebase_doc' => $fbId, 'owner' => $ownerUid]);
-                $skip++;
-                continue;
             }
 
             $categoryId = $this->categoryResolver->resolveLocalCategoryId($d);
             if ($categoryId === null) {
                 $this->logger->skip('listing', 'unresolved_category', ['firebase_doc' => $fbId]);
-                $skip++;
-                continue;
             }
-            if (! Category::query()->whereKey($categoryId)->exists()) {
+            if ($categoryId !== null && ! Category::query()->whereKey($categoryId)->exists()) {
                 $this->logger->skip('listing', 'category_missing_in_db', ['firebase_doc' => $fbId, 'category_id' => $categoryId]);
-                $skip++;
-                continue;
+                $categoryId = null;
             }
 
             $title = FirestoreDataNormalizer::trimString($d['name'] ?? $d['title'] ?? null);
             if ($title === null) {
                 $this->logger->skip('listing', 'empty_title', ['firebase_doc' => $fbId]);
-                $skip++;
-                continue;
             }
 
             if ($dryRun) {
@@ -1102,10 +1114,11 @@ class FirestoreMigrationService
                 $search = FirestoreDataNormalizer::truncateUtf8($search) ?? '';
 
                 $listing = Listing::query()->create([
+                    'firebase_id' => $fbId,
                     'user_id' => $userId,
                     'store_id' => $storeId,
                     'service_type' => $serviceType,
-                    'title' => Str::limit($title, 500, ''),
+                    'title' => $title !== null ? Str::limit($title, 255, '') : null,
                     'views_count' => max(0, $views),
                     'service_category' => $categoryId,
                     'service_modality' => $this->serviceModality($d),
@@ -1130,12 +1143,13 @@ class FirestoreMigrationService
 
                 $created = FirestoreDataNormalizer::parseTimestamp($d['createdAt'] ?? $d['createdat'] ?? null);
                 $updated = FirestoreDataNormalizer::parseTimestamp($d['updatedAt'] ?? $d['updatedat'] ?? null);
-                if ($created || $updated) {
-                    DB::table('listings')->where('id', $listing->id)->update(array_filter([
-                        'created_at' => $created,
-                        'updated_at' => $updated ?? $created,
-                    ]));
-                }
+                $deleted = FirestoreDataNormalizer::parseTimestamp($d['deletedAt'] ?? $d['deletedat'] ?? null);
+                $effectiveCreated = $created ?? $updated;
+                DB::table('listings')->where('id', $listing->id)->update([
+                    'created_at' => $effectiveCreated,
+                    'updated_at' => $updated,
+                    'deleted_at' => $deleted,
+                ]);
 
                 $this->state->setListingId($fbId, (int) $listing->id);
 
@@ -1159,6 +1173,565 @@ class FirestoreMigrationService
         }
 
         $line("Listings: ok={$ok} skip={$skip} err={$err}");
+
+        return ['ok' => $ok, 'skip' => $skip, 'err' => $err];
+    }
+
+    /**
+     * @return array{ok:int,skip:int,err:int}
+     */
+    public function runFavorites(?int $limit, bool $dryRun, bool $skipMedia, callable $line): array
+    {
+        $folder = (string) config('firebase-migration.favorites_folder', 'favorites');
+        $paths = $this->reader->jsonFiles($folder);
+        $ok = 0;
+        $skip = 0;
+        $err = 0;
+        $n = 0;
+
+        foreach ($paths as $path) {
+            if ($limit !== null && $n >= $limit) {
+                break;
+            }
+
+            $doc = $this->reader->readDocument($path);
+            if (! isset($doc['__id'], $doc['data']) || ! is_array($doc['data'])) {
+                $this->logger->skip('favorite', 'invalid_json', ['path' => $path]);
+                $err++;
+                continue;
+            }
+
+            $fbId = (string) $doc['__id'];
+            $d = FirestoreDataNormalizer::utf8Recursive($doc['data']);
+            $n++;
+
+            $itemType = strtolower((string) ($d['itemType'] ?? $d['item_type'] ?? ''));
+            if ($itemType !== '' && $itemType !== 'listing') {
+                $this->logger->skip('favorite', 'unsupported_item_type', ['firebase_doc' => $fbId, 'item_type' => $itemType]);
+                $skip++;
+                continue;
+            }
+
+            $fbUserId = $this->favoriteUserFirebaseId($d);
+            $fbListingId = $this->favoriteListingFirebaseId($d);
+
+            if ($fbUserId === null || $fbListingId === null) {
+                $this->logger->skip('favorite', 'missing_user_or_listing_id', ['firebase_doc' => $fbId]);
+                $skip++;
+                continue;
+            }
+
+            $userId = $this->state->getUserId($fbUserId);
+            if ($userId !== null) {
+                $stateUser = User::query()->whereKey($userId)->first(['id', 'firebase_id', 'provider_id']);
+                $stateFirebaseId = is_string($stateUser?->firebase_id) ? trim((string) $stateUser->firebase_id) : '';
+                $stateProviderId = is_string($stateUser?->provider_id) ? trim((string) $stateUser->provider_id) : '';
+                if ($stateUser === null || ($stateFirebaseId !== $fbUserId && $stateProviderId !== $fbUserId)) {
+                    $userId = null;
+                }
+            }
+            if ($userId === null) {
+                $userId = User::query()->where('firebase_id', $fbUserId)->value('id')
+                    ?? User::query()->where('provider_id', $fbUserId)->value('id');
+                $userId = $userId !== null ? (int) $userId : null;
+            }
+            if ($userId === null) {
+                $this->logger->skip('favorite', 'user_not_found', ['firebase_doc' => $fbId, 'firebase_user' => $fbUserId]);
+                $skip++;
+                continue;
+            }
+
+            $listingId = $this->state->getListingId($fbListingId);
+            if ($listingId !== null) {
+                $stateListing = Listing::withTrashed()->whereKey($listingId)->first(['id', 'firebase_id', 'deleted_at']);
+                $stateFirebaseId = is_string($stateListing?->firebase_id) ? trim((string) $stateListing->firebase_id) : '';
+                if ($stateListing === null || $stateFirebaseId !== $fbListingId) {
+                    $this->state->forgetListing($fbListingId);
+                    $listingId = null;
+                } elseif ($stateListing->deleted_at !== null) {
+                    Listing::withTrashed()->whereKey($stateListing->id)->restore();
+                }
+            }
+            if ($listingId === null) {
+                $byFirebase = Listing::withTrashed()->where('firebase_id', $fbListingId)->first(['id', 'deleted_at']);
+                if ($byFirebase !== null && $byFirebase->deleted_at !== null) {
+                    Listing::withTrashed()->whereKey($byFirebase->id)->restore();
+                }
+                $listingId = $byFirebase !== null ? (int) $byFirebase->id : null;
+            }
+            if ($listingId === null) {
+                if ($dryRun) {
+                    $this->logger->skip('favorite', 'listing_not_found', ['firebase_doc' => $fbId, 'firebase_listing' => $fbListingId]);
+                    $skip++;
+                    continue;
+                }
+                try {
+                    $itemData = is_array($d['itemData'] ?? null) ? $d['itemData'] : [];
+                    $ownerFirebase = FirestoreDataNormalizer::trimString(
+                        $itemData['ownerId']
+                        ?? $itemData['authorId']
+                        ?? data_get($itemData, 'author.id')
+                        ?? null
+                    );
+                    $ownerUserId = $userId;
+                    if ($ownerFirebase !== null) {
+                        $ownerMapped = $this->state->getUserId($ownerFirebase);
+                        if ($ownerMapped === null) {
+                            $ownerMapped = User::query()->where('firebase_id', $ownerFirebase)->value('id')
+                                ?? User::query()->where('provider_id', $ownerFirebase)->value('id');
+                        }
+                        if ($ownerMapped !== null) {
+                            $ownerUserId = (int) $ownerMapped;
+                        }
+                    }
+                    $title = FirestoreDataNormalizer::trimString($itemData['title'] ?? null) ?? 'Imported from favorite';
+                    $created = FirestoreDataNormalizer::parseTimestamp($d['createdAt'] ?? $d['createdat'] ?? null);
+                    $updated = FirestoreDataNormalizer::parseTimestamp($d['updatedAt'] ?? $d['updatedat'] ?? null);
+
+                    $listing = Listing::query()->create([
+                        'firebase_id' => $fbListingId,
+                        'user_id' => $ownerUserId,
+                        'store_id' => null,
+                        'service_type' => Listing::ARTICLE_FOR_SALE,
+                        'title' => Str::limit($title, 255, ''),
+                        'availability' => true,
+                    ]);
+                    DB::table('listings')->where('id', $listing->id)->update([
+                        'created_at' => $created,
+                        'updated_at' => $updated,
+                    ]);
+                    $listingId = (int) $listing->id;
+                    $this->state->setListingId($fbListingId, $listingId);
+                    $this->state->save();
+                } catch (Throwable) {
+                    $this->logger->skip('favorite', 'listing_not_found', ['firebase_doc' => $fbId, 'firebase_listing' => $fbListingId]);
+                    $skip++;
+                    continue;
+                }
+            }
+
+            $created = FirestoreDataNormalizer::parseTimestamp($d['createdAt'] ?? $d['createdat'] ?? null);
+            $updated = FirestoreDataNormalizer::parseTimestamp($d['updatedAt'] ?? $d['updatedat'] ?? null);
+            $deleted = FirestoreDataNormalizer::parseTimestamp($d['deletedAt'] ?? $d['deletedat'] ?? null);
+
+            if ($dryRun) {
+                $ok++;
+                continue;
+            }
+
+            try {
+                $favorite = Favorite::query()
+                    ->where('firebase_id', $fbId)
+                    ->orWhere(fn ($q) => $q->where('user_id', $userId)->where('listing_id', $listingId))
+                    ->first();
+
+                if ($favorite) {
+                    $favorite->fill([
+                        'firebase_id' => $fbId,
+                        'user_id' => $userId,
+                        'listing_id' => $listingId,
+                    ]);
+                    $favorite->save();
+                    DB::table('favorites')->where('id', $favorite->id)->update(array_filter([
+                        'updated_at' => $updated ?? $created ?? $favorite->updated_at,
+                        'deleted_at' => $deleted,
+                    ], fn ($v) => $v !== null));
+                } else {
+                    $favorite = Favorite::query()->create([
+                        'firebase_id' => $fbId,
+                        'user_id' => $userId,
+                        'listing_id' => $listingId,
+                    ]);
+                    DB::table('favorites')->where('id', $favorite->id)->update(array_filter([
+                        'created_at' => $created,
+                        'updated_at' => $updated ?? $created,
+                        'deleted_at' => $deleted,
+                    ], fn ($v) => $v !== null));
+                }
+
+                $ok++;
+            } catch (Throwable $e) {
+                $this->logger->error('favorite', $e->getMessage(), ['firebase_doc' => $fbId]);
+                $err++;
+            }
+        }
+
+        $line("Favorites: ok={$ok} skip={$skip} err={$err}");
+
+        return ['ok' => $ok, 'skip' => $skip, 'err' => $err];
+    }
+
+    /**
+     * @return array{ok:int,skip:int,err:int}
+     */
+    public function runAppConfig(?int $limit, bool $dryRun, bool $skipMedia, callable $line): array
+    {
+        $folder = (string) config('firebase-migration.app_config_folder', 'app_config');
+        $paths = $this->reader->jsonFiles($folder);
+        $ok = 0;
+        $skip = 0;
+        $err = 0;
+        $n = 0;
+
+        foreach ($paths as $path) {
+            if ($limit !== null && $n >= $limit) {
+                break;
+            }
+
+            $doc = $this->reader->readDocument($path);
+            if (! isset($doc['__id'], $doc['data']) || ! is_array($doc['data'])) {
+                $this->logger->skip('app_config', 'invalid_json', ['path' => $path]);
+                $err++;
+                continue;
+            }
+
+            $docId = (string) $doc['__id'];
+            $data = FirestoreDataNormalizer::utf8Recursive($doc['data']);
+            $n++;
+
+            // We only migrate the app settings payload used by clients for version/maintenance.
+            if ($docId !== 'version_and_maintenance') {
+                $skip++;
+                continue;
+            }
+
+            $payload = [
+                'maintenance_mode' => FirestoreDataNormalizer::truthy($data['maintenance_mode'] ?? false),
+                'maintenance_title' => FirestoreDataNormalizer::trimString($data['maintenance_title'] ?? null),
+                'maintenance_message' => FirestoreDataNormalizer::trimString($data['maintenance_message'] ?? null),
+                'min_version_android' => FirestoreDataNormalizer::trimString($data['min_version_android'] ?? null) ?? '1.0.0',
+                'latest_version_android' => FirestoreDataNormalizer::trimString($data['latest_version_android'] ?? null) ?? '1.0.0',
+                'android_store_url' => FirestoreDataNormalizer::trimString($data['android_store_url'] ?? null),
+                'min_version_ios' => FirestoreDataNormalizer::trimString($data['min_version_ios'] ?? null) ?? '1.0.0',
+                'latest_version_ios' => FirestoreDataNormalizer::trimString($data['latest_version_ios'] ?? null) ?? '1.0.0',
+                'ios_store_url' => FirestoreDataNormalizer::trimString($data['ios_store_url'] ?? null),
+                'force_update_below_min' => FirestoreDataNormalizer::truthy($data['force_update_below_min'] ?? false),
+                'release_notes' => FirestoreDataNormalizer::trimString($data['release_notes'] ?? null),
+                'enabled_location_filter' => FirestoreDataNormalizer::truthy($data['enabled_location_filter'] ?? false),
+            ];
+
+            if ($dryRun) {
+                $ok++;
+                continue;
+            }
+
+            try {
+                $row = AppSetting::query()->orderBy('id')->first();
+                if ($row === null) {
+                    AppSetting::query()->create($payload);
+                } else {
+                    $row->fill($payload);
+                    $row->save();
+                }
+                $ok++;
+            } catch (Throwable $e) {
+                $this->logger->error('app_config', $e->getMessage(), ['firebase_doc' => $docId]);
+                $err++;
+            }
+        }
+
+        $line("App config: ok={$ok} skip={$skip} err={$err}");
+
+        return ['ok' => $ok, 'skip' => $skip, 'err' => $err];
+    }
+
+    /**
+     * @return array{ok:int,skip:int,err:int}
+     */
+    public function runSearchQueries(?int $limit, bool $dryRun, bool $skipMedia, callable $line): array
+    {
+        $folder = (string) config('firebase-migration.search_queries_folder', 'search_queries');
+        $paths = $this->reader->jsonFiles($folder);
+        $ok = 0;
+        $skip = 0;
+        $err = 0;
+        $n = 0;
+
+        foreach ($paths as $path) {
+            if ($limit !== null && $n >= $limit) {
+                break;
+            }
+
+            $doc = $this->reader->readDocument($path);
+            if (! isset($doc['__id'], $doc['data']) || ! is_array($doc['data'])) {
+                $this->logger->skip('search_query', 'invalid_json', ['path' => $path]);
+                $err++;
+                continue;
+            }
+
+            $d = FirestoreDataNormalizer::utf8Recursive($doc['data']);
+            $n++;
+
+            $term = FirestoreDataNormalizer::trimString($d['query'] ?? null)
+                ?? FirestoreDataNormalizer::trimString($d['queryLower'] ?? null);
+            if ($term === null) {
+                $this->logger->skip('search_query', 'missing_query', ['firebase_doc' => (string) ($doc['__id'] ?? '')]);
+                $skip++;
+                continue;
+            }
+
+            $hits = max(1, (int) ($d['count'] ?? 1));
+
+            if ($dryRun) {
+                $ok++;
+                continue;
+            }
+
+            try {
+                $existing = SearchSuggestion::query()->where('term', $term)->first();
+                if ($existing === null) {
+                    SearchSuggestion::query()->create([
+                        'term' => Str::limit($term, 255, ''),
+                        'hits' => $hits,
+                    ]);
+                } else {
+                    $existing->hits = max((int) $existing->hits, $hits);
+                    $existing->save();
+                }
+                $ok++;
+            } catch (Throwable $e) {
+                $this->logger->error('search_query', $e->getMessage(), ['firebase_doc' => (string) ($doc['__id'] ?? '')]);
+                $err++;
+            }
+        }
+
+        $line("Search queries: ok={$ok} skip={$skip} err={$err}");
+
+        return ['ok' => $ok, 'skip' => $skip, 'err' => $err];
+    }
+
+    /**
+     * @return array{ok:int,skip:int,err:int}
+     */
+    public function runStoreFollowers(?int $limit, bool $dryRun, bool $skipMedia, callable $line): array
+    {
+        $folder = (string) config('firebase-migration.store_followers_folder', 'store_followers');
+        $paths = $this->reader->jsonFiles($folder);
+        $ok = 0;
+        $skip = 0;
+        $err = 0;
+        $n = 0;
+
+        foreach ($paths as $path) {
+            if ($limit !== null && $n >= $limit) {
+                break;
+            }
+
+            $doc = $this->reader->readDocument($path);
+            if (! isset($doc['__id'], $doc['data']) || ! is_array($doc['data'])) {
+                $this->logger->skip('store_follower', 'invalid_json', ['path' => $path]);
+                $err++;
+                continue;
+            }
+
+            $d = FirestoreDataNormalizer::utf8Recursive($doc['data']);
+            $fbDocId = (string) $doc['__id'];
+            $n++;
+
+            $followerUid = FirestoreDataNormalizer::trimString($d['followerId'] ?? $d['follower_id'] ?? null);
+            $ownerUid = FirestoreDataNormalizer::trimString($d['storeOwnerId'] ?? $d['store_owner_id'] ?? null);
+            if ($followerUid === null || $ownerUid === null) {
+                $this->logger->skip('store_follower', 'missing_user_or_owner', ['firebase_doc' => $fbDocId]);
+                $skip++;
+                continue;
+            }
+
+            $userId = $this->state->getUserId($followerUid);
+            if ($userId === null) {
+                $userId = User::query()->where('firebase_id', $followerUid)->value('id');
+            }
+            if ($userId === null) {
+                $userId = User::query()->where('provider_id', $followerUid)->value('id');
+            }
+            if ($userId === null) {
+                $this->logger->skip('store_follower', 'follower_not_found', ['firebase_doc' => $fbDocId, 'follower' => $followerUid]);
+                $skip++;
+                continue;
+            }
+            $userId = (int) $userId;
+
+            $storeId = $this->state->getStoreIdByOwnerUid($ownerUid);
+            if ($storeId === null) {
+                $ownerUserId = $this->state->getUserId($ownerUid);
+                if ($ownerUserId === null) {
+                    $ownerUserId = User::query()->where('firebase_id', $ownerUid)->value('id');
+                }
+                if ($ownerUserId === null) {
+                    $ownerUserId = User::query()->where('provider_id', $ownerUid)->value('id');
+                }
+                if ($ownerUserId !== null) {
+                    $storeId = Store::query()->where('user_id', (int) $ownerUserId)->value('id');
+                }
+            }
+            if ($storeId === null) {
+                $this->logger->skip('store_follower', 'store_not_found', ['firebase_doc' => $fbDocId, 'owner' => $ownerUid]);
+                $skip++;
+                continue;
+            }
+            $storeId = (int) $storeId;
+
+            $created = FirestoreDataNormalizer::parseTimestamp($d['createdAt'] ?? $d['createdat'] ?? null);
+            $updated = FirestoreDataNormalizer::parseTimestamp($d['updatedAt'] ?? $d['updatedat'] ?? null);
+            $now = now();
+
+            if ($dryRun) {
+                $ok++;
+                continue;
+            }
+
+            try {
+                DB::table('follows')->updateOrInsert(
+                    ['user_id' => $userId, 'store_id' => $storeId],
+                    [
+                        'created_at' => $created ?? $now,
+                        'updated_at' => $updated ?? $created ?? $now,
+                    ]
+                );
+                $ok++;
+            } catch (Throwable $e) {
+                $this->logger->error('store_follower', $e->getMessage(), ['firebase_doc' => $fbDocId]);
+                $err++;
+            }
+        }
+
+        $line("Store followers: ok={$ok} skip={$skip} err={$err}");
+
+        return ['ok' => $ok, 'skip' => $skip, 'err' => $err];
+    }
+
+    /**
+     * @return array{ok:int,skip:int,err:int}
+     */
+    public function runReviews(?int $limit, bool $dryRun, bool $skipMedia, callable $line): array
+    {
+        $folder = (string) config('firebase-migration.reviews_folder', 'reviews');
+        $paths = $this->reader->jsonFiles($folder);
+        $ok = 0;
+        $skip = 0;
+        $err = 0;
+        $n = 0;
+
+        foreach ($paths as $path) {
+            if ($limit !== null && $n >= $limit) {
+                break;
+            }
+
+            $doc = $this->reader->readDocument($path);
+            if (! isset($doc['__id'], $doc['data']) || ! is_array($doc['data'])) {
+                $this->logger->skip('review', 'invalid_json', ['path' => $path]);
+                $err++;
+                continue;
+            }
+
+            $fbId = (string) $doc['__id'];
+            $d = FirestoreDataNormalizer::utf8Recursive($doc['data']);
+            $n++;
+
+            $reviewerUid = FirestoreDataNormalizer::trimString($d['reviewerId'] ?? $d['reviewer_id'] ?? null);
+            if ($reviewerUid === null) {
+                $this->logger->skip('review', 'missing_reviewer', ['firebase_doc' => $fbId]);
+                $skip++;
+                continue;
+            }
+
+            $userId = $this->state->getUserId($reviewerUid);
+            if ($userId === null) {
+                $userId = User::query()->where('firebase_id', $reviewerUid)->value('id');
+            }
+            if ($userId === null) {
+                $userId = User::query()->where('provider_id', $reviewerUid)->value('id');
+            }
+            if ($userId === null) {
+                $this->logger->skip('review', 'user_not_found', ['firebase_doc' => $fbId, 'firebase_user' => $reviewerUid]);
+                $skip++;
+                continue;
+            }
+            $userId = (int) $userId;
+
+            $targetType = strtolower((string) ($d['targetType'] ?? $d['target_type'] ?? ''));
+            $targetId = FirestoreDataNormalizer::trimString($d['targetId'] ?? $d['target_id'] ?? null);
+            if ($targetId === null) {
+                $this->logger->skip('review', 'missing_target', ['firebase_doc' => $fbId]);
+                $skip++;
+                continue;
+            }
+
+            $storeId = null;
+            if ($targetType === 'store') {
+                $storeId = $this->state->getStoreIdByDocId($targetId);
+                if ($storeId === null) {
+                    $storeId = Store::query()->where('firebase_id', $targetId)->value('id');
+                }
+            } else {
+                $listingId = $this->state->getListingId($targetId);
+                if ($listingId === null) {
+                    $listingId = Listing::query()->where('firebase_id', $targetId)->value('id');
+                }
+                if ($listingId !== null) {
+                    $storeId = Listing::query()->whereKey((int) $listingId)->value('store_id');
+                }
+            }
+
+            if ($storeId === null) {
+                $this->logger->skip('review', 'store_not_found', [
+                    'firebase_doc' => $fbId,
+                    'target_type' => $targetType,
+                    'target_id' => $targetId,
+                ]);
+                $skip++;
+                continue;
+            }
+
+            $ratingValue = (int) ($d['rating'] ?? 0);
+            $ratingValue = max(1, min(5, $ratingValue));
+            $content = FirestoreDataNormalizer::trimString($d['content'] ?? null);
+            $title = FirestoreDataNormalizer::trimString($d['title'] ?? null);
+            $comment = $content;
+            if ($title !== null && $title !== '') {
+                $comment = $comment !== null && $comment !== '' ? ($title."\n".$comment) : $title;
+            }
+            $created = FirestoreDataNormalizer::parseTimestamp($d['createdAt'] ?? $d['createdat'] ?? null);
+            $updated = FirestoreDataNormalizer::parseTimestamp($d['updatedAt'] ?? $d['updatedat'] ?? null);
+
+            if ($dryRun) {
+                $ok++;
+                continue;
+            }
+
+            try {
+                $rating = Rating::query()
+                    ->where('user_id', $userId)
+                    ->where('store_id', (int) $storeId)
+                    ->first();
+
+                if ($rating === null) {
+                    $rating = Rating::query()->create([
+                        'user_id' => $userId,
+                        'store_id' => (int) $storeId,
+                        'rating' => $ratingValue,
+                        'comment' => $comment,
+                    ]);
+                } else {
+                    $rating->fill([
+                        'rating' => $ratingValue,
+                        'comment' => $comment,
+                    ]);
+                    $rating->save();
+                }
+
+                DB::table('ratings')->where('id', $rating->id)->update(array_filter([
+                    'created_at' => $created ?? $rating->created_at,
+                    'updated_at' => $updated ?? $created ?? $rating->updated_at,
+                ], fn ($v) => $v !== null));
+
+                $ok++;
+            } catch (Throwable $e) {
+                $this->logger->error('review', $e->getMessage(), ['firebase_doc' => $fbId]);
+                $err++;
+            }
+        }
+
+        $line("Reviews: ok={$ok} skip={$skip} err={$err}");
 
         return ['ok' => $ok, 'skip' => $skip, 'err' => $err];
     }
@@ -1202,6 +1775,46 @@ class FirestoreMigrationService
         $store = Store::query()->where('user_id', $userId)->value('id');
 
         return $store !== null ? (int) $store : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $d
+     */
+    protected function favoriteUserFirebaseId(array $d): ?string
+    {
+        $candidates = [
+            $d['author'] ?? null,
+            $d['userId'] ?? null,
+            $d['user_id'] ?? null,
+            data_get($d, 'itemData.author.id'),
+            data_get($d, 'itemData.author.uid'),
+            data_get($d, 'itemData.authorId'),
+            data_get($d, 'itemData.ownerId'),
+        ];
+
+        foreach ($candidates as $candidate) {
+            $id = FirestoreDataNormalizer::trimString($candidate);
+            if ($id !== null) {
+                return $id;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $d
+     */
+    protected function favoriteListingFirebaseId(array $d): ?string
+    {
+        foreach ([$d['itemId'] ?? null, $d['listingId'] ?? null, $d['listing_id'] ?? null] as $candidate) {
+            $id = FirestoreDataNormalizer::trimString($candidate);
+            if ($id !== null) {
+                return $id;
+            }
+        }
+
+        return null;
     }
 
     /**

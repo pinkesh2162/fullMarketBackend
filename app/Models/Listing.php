@@ -18,6 +18,7 @@ class Listing extends Model implements HasMedia
     const LISTING_IMAGES = 'listing_images';
 
     protected $fillable = [
+        'firebase_id',
         'user_id',
         'store_id',
         'service_type',
@@ -42,6 +43,7 @@ class Listing extends Model implements HasMedia
         'vehical_info',
         'fual_type',
         'transmission',
+        'deleted_at',
     ];
 
     const FILTER_PARAMS = [

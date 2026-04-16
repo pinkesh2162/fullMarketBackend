@@ -16,6 +16,7 @@ class Store extends Model implements HasMedia
 
     protected $fillable = [
         'unique_key',
+        'firebase_id',
         'user_id',
         'name',
         'location',

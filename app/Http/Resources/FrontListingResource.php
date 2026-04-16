@@ -18,7 +18,7 @@ class FrontListingResource extends JsonResource
             'id' => $this->id,
             'title' => $this->title,
             'description' => $this->description,
-            'created_at' => $this->created_at->diffForHumans(),
+            'created_at' => $this->created_at,
             'images' => $this->images,
             'additional_info' => $this->additional_info,
         ];
