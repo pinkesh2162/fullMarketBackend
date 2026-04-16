@@ -2446,14 +2446,18 @@ class FirestoreMigrationService
     }
 
     /**
-     * When Firestore category ids are custom/non-migrated, fallback to category name.
+     * Fallback by exact category name match only; never create guessed categories.
      */
     protected function resolveCategoryFromListingName(array $d, bool $dryRun): ?int
     {
         $name = FirestoreDataNormalizer::trimString(
-            $d['categoryName']
+            // Prefer specific service category labels over generic category fields like "Other".
+            data_get($d, 'custom_fields.main_service_category_name')
+            ?? data_get($d, 'customFields.main_service_category_name')
+            ?? $d['mainServiceCategoryDisplayName']
+            ?? $d['main_service_category_name']
+            ?? $d['categoryName']
             ?? $d['category_name']
-            ?? data_get($d, 'custom_fields.main_service_category_name')
             ?? null
         );
         if ($name === null) {
@@ -2472,17 +2476,7 @@ class FirestoreMigrationService
         if ($existing !== null) {
             return (int) $existing;
         }
-
-        if ($dryRun) {
-            return null;
-        }
-
-        $created = Category::query()->create([
-            'user_id' => null,
-            'name' => Str::limit($name, 255, ''),
-            'parent_id' => null,
-        ]);
-
-        return (int) $created->id;
+        
+        return null;
     }
 }
