@@ -9,7 +9,7 @@ use App\Services\FcmService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Mail;
 
-class Test extends Command
+class __Test extends Command
 {
     /**
      * The name and signature of the console command.

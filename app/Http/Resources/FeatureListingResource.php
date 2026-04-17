@@ -20,6 +20,7 @@ class FeatureListingResource extends JsonResource
             'created_at' => $this->created_at->diffForHumans(),
             'images' => $this->images,
             'additional_info' => $this->additional_info,
+            'service_type' => $this->service_type,
         ];
     }
 }
