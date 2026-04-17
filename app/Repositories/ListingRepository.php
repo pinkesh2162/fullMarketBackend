@@ -422,9 +422,7 @@ class ListingRepository extends BaseRepository
                         $q->whereIn('service_category', $anchorCategoryIds);
                     })
                     ->whereRaw(
-                        "(6371 * acos(cos(radians(?)) * cos(radians(JSON_UNQUOTE(JSON_EXTRACT(additional_info, '$.location.lat'))))
-                        * cos(radians(JSON_UNQUOTE(JSON_EXTRACT(additional_info, '$.location.long'))) - radians(?))
-                        + sin(radians(?)) * sin(radians(JSON_UNQUOTE(JSON_EXTRACT(additional_info, '$.location.lat')))))) <= ?",
+                        Listing::sqlHaversineKmWithinRadiusOnAdditionalInfo(),
                         [$lat, $lng, $lat, $radius]
                     )
                     ->orderByDesc($recencyCol)
@@ -778,8 +776,8 @@ class ListingRepository extends BaseRepository
         if ($loc === []) {
             return null;
         }
-        $lat = $loc['lat'] ?? null;
-        $lng = $loc['long'] ?? $loc['lng'] ?? null;
+        $lat = $loc['lat'] ?? $loc['latitude'] ?? null;
+        $lng = $loc['long'] ?? $loc['lng'] ?? $loc['longitude'] ?? null;
         if (! is_numeric($lat) || ! is_numeric($lng)) {
             return null;
         }

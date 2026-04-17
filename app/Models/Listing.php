@@ -172,21 +172,423 @@ class Listing extends Model implements HasMedia
             }
         });
 
-        $query->when($filters['location'] ?? false, function ($q, $location) {
-            $q->where('additional_info->location->address', 'like', "%{$location}%");
+        $locationTrim = trim((string) ($filters['location'] ?? ''));
+        $hasTextLocation = $locationTrim !== '';
+        $hasGeo = isset($filters['lat'], $filters['long'], $filters['radius']);
+        $lat = $hasGeo ? (float) $filters['lat'] : null;
+        $lng = $hasGeo ? (float) $filters['long'] : null;
+        $radiusKm = $hasGeo ? max(0.0, min((float) ($filters['radius'] ?? 0), 500.0)) : 0.0;
+        $applyGeo = $hasGeo && $radiusKm > 0.0;
+
+        if ($hasTextLocation && $applyGeo) {
+            $haversineSql = self::sqlHaversineKmWithinRadiusOnAdditionalInfo();
+            $noCoordsSql = self::sqlListingLacksValidAdditionalInfoLatLong();
+            $bindings = [$lat, $lng, $lat, $radiusKm];
+            $query->where(function (Builder $outer) use ($locationTrim, $haversineSql, $noCoordsSql, $bindings) {
+                $outer->where(function (Builder $mid) use ($haversineSql, $noCoordsSql, $bindings) {
+                    $mid->whereRaw($haversineSql, $bindings)
+                        ->orWhereRaw('('.$noCoordsSql.')');
+                });
+                $outer->where(function (Builder $text) use ($locationTrim, $haversineSql, $bindings) {
+                    $text->where(function (Builder $strict) use ($locationTrim) {
+                        self::applyLocationTextStrictToQuery($strict, $locationTrim);
+                    })->orWhere(function (Builder $anchor) use ($locationTrim, $haversineSql, $bindings) {
+                        self::applyWithinRadiusAnchorOrSparseToQuery($anchor, $locationTrim, $haversineSql, $bindings);
+                    });
+                });
+            });
+        } elseif ($hasTextLocation) {
+            $query->where(function (Builder $q) use ($locationTrim) {
+                self::applyLocationTextStrictToQuery($q, $locationTrim);
+            });
+        } elseif ($applyGeo) {
+            $query->whereRaw(
+                self::sqlHaversineKmWithinRadiusOnAdditionalInfo(),
+                [$lat, $lng, $lat, $radiusKm]
+            );
+        }
+    }
+
+    /**
+     * Lowercased single string of address + city + state + country for location text matching.
+     */
+    protected static function sqlLocationTextBlobLower(): string
+    {
+        return 'LOWER(CONCAT_WS(\' \',
+            IFNULL(JSON_UNQUOTE(JSON_EXTRACT(additional_info, \'$.location.address\')), \'\'),
+            IFNULL(JSON_UNQUOTE(JSON_EXTRACT(additional_info, \'$.location.city\')), \'\'),
+            IFNULL(JSON_UNQUOTE(JSON_EXTRACT(additional_info, \'$.location.state\')), \'\'),
+            IFNULL(JSON_UNQUOTE(JSON_EXTRACT(additional_info, \'$.location.country\')), \'\')
+        ))';
+    }
+
+    /**
+     * True when the listing has no usable lat/long in additional_info (radius cannot apply).
+     */
+    protected static function sqlListingLacksValidAdditionalInfoLatLong(): string
+    {
+        $lat = self::sqlAdditionalInfoLatitudeScalarExpr();
+        $lng = self::sqlAdditionalInfoLongitudeScalarExpr();
+
+        return "(
+            {$lat} IS NULL OR {$lat} = '' OR {$lng} IS NULL OR {$lng} = ''
+            OR NOT (
+                CAST({$lat} AS DECIMAL(12,8)) BETWEEN -90 AND 90
+                AND CAST({$lng} AS DECIMAL(12,8)) BETWEEN -180 AND 180
+            )
+        )";
+    }
+
+    protected static function sqlAdditionalInfoLatitudeScalarExpr(): string
+    {
+        return 'COALESCE(
+            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(additional_info, \'$.location.lat\'))), \'\'),
+            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(additional_info, \'$.location.latitude\'))), \'\')
+        )';
+    }
+
+    protected static function sqlAdditionalInfoLongitudeScalarExpr(): string
+    {
+        return 'COALESCE(
+            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(additional_info, \'$.location.long\'))), \'\'),
+            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(additional_info, \'$.location.lng\'))), \'\'),
+            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(additional_info, \'$.location.longitude\'))), \'\')
+        )';
+    }
+
+    /**
+     * Comma-separated place labels (e.g. "Ciudad de México, CDMX, Mexico") → require each
+     * non-generic segment on the location blob (AND), so "Mexico" alone does not match Estado de México.
+     *
+     * @return list<string>
+     */
+    protected static function significantLocationSegments(string $locationTrim): array
+    {
+        $parts = preg_split('/\s*,\s*/u', $locationTrim) ?: [];
+        $generic = self::genericLocationTokensLower();
+        $usAbbrevs = self::usStateAbbrevToNameLower();
+        $out = [];
+        foreach ($parts as $p) {
+            $p = trim((string) $p);
+            if ($p === '') {
+                continue;
+            }
+            if (preg_match('/^\d[\d\s\-]*$/u', $p)) {
+                continue;
+            }
+            $key = mb_strtolower($p);
+            if (isset($generic[$key])) {
+                continue;
+            }
+            if (mb_strlen($p) === 2 && ctype_alpha($p) && ! isset($usAbbrevs[mb_strtoupper($p)])) {
+                continue;
+            }
+            $out[] = $p;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return array<string, true> Lowercased country/region tokens excluded from mandatory AND matching.
+     */
+    protected static function genericLocationTokensLower(): array
+    {
+        $keys = [
+            'mexico', 'méxico', 'mx', 'usa', 'us', 'u.s.', 'u.s.a.', 'united states', 'united states of america',
+            'canada', 'canadá', 'uk', 'u.k.', 'united kingdom', 'spain', 'españa', 'espana',
+        ];
+
+        return array_fill_keys($keys, true);
+    }
+
+    /**
+     * LIKE patterns (without %) for one user segment; any one match counts as that segment satisfied.
+     *
+     * @return list<string>
+     */
+    protected static function segmentSearchNeedles(string $segment): array
+    {
+        $s = mb_strtolower(trim($segment));
+        if ($s === '') {
+            return [];
+        }
+        if (preg_match('/^ciudad\s+de\s+m[eé]xico$/u', $s) || $s === 'mexico city') {
+            return ['ciudad de méxico', 'ciudad de mexico', 'mexico city'];
+        }
+        if ($s === 'cdmx' || $s === 'c.d.m.x.' || $s === 'df' || $s === 'd.f.' || $s === 'distrito federal') {
+            return ['cdmx', 'distrito federal', 'ciudad de méxico', 'ciudad de mexico'];
+        }
+        if (str_contains($s, 'cdmx')) {
+            return [$s];
+        }
+
+        $us = self::usStateNeedlesForSegment($segment);
+        if ($us !== []) {
+            return $us;
+        }
+
+        return [mb_strtolower($segment)];
+    }
+
+    /**
+     * @return array<string, string> Uppercase 2-letter US state code => lowercase full name.
+     */
+    protected static function usStateAbbrevToNameLower(): array
+    {
+        static $map = null;
+        if ($map !== null) {
+            return $map;
+        }
+        $pairs = [
+            'AL' => 'alabama', 'AK' => 'alaska', 'AZ' => 'arizona', 'AR' => 'arkansas', 'CA' => 'california',
+            'CO' => 'colorado', 'CT' => 'connecticut', 'DE' => 'delaware', 'FL' => 'florida', 'GA' => 'georgia',
+            'HI' => 'hawaii', 'ID' => 'idaho', 'IL' => 'illinois', 'IN' => 'indiana', 'IA' => 'iowa',
+            'KS' => 'kansas', 'KY' => 'kentucky', 'LA' => 'louisiana', 'ME' => 'maine', 'MD' => 'maryland',
+            'MA' => 'massachusetts', 'MI' => 'michigan', 'MN' => 'minnesota', 'MS' => 'mississippi', 'MO' => 'missouri',
+            'MT' => 'montana', 'NE' => 'nebraska', 'NV' => 'nevada', 'NH' => 'new hampshire', 'NJ' => 'new jersey',
+            'NM' => 'new mexico', 'NY' => 'new york', 'NC' => 'north carolina', 'ND' => 'north dakota', 'OH' => 'ohio',
+            'OK' => 'oklahoma', 'OR' => 'oregon', 'PA' => 'pennsylvania', 'RI' => 'rhode island', 'SC' => 'south carolina',
+            'SD' => 'south dakota', 'TN' => 'tennessee', 'TX' => 'texas', 'UT' => 'utah', 'VT' => 'vermont',
+            'VA' => 'virginia', 'WA' => 'washington', 'WV' => 'west virginia', 'WI' => 'wisconsin', 'WY' => 'wyoming',
+            'DC' => 'district of columbia',
+        ];
+        $map = $pairs;
+
+        return $map;
+    }
+
+    /**
+     * LIKE needles (without surrounding %) for a US state segment (abbrev or full name).
+     *
+     * @return list<string>
+     */
+    protected static function usStateNeedlesForSegment(string $segment): array
+    {
+        $t = trim($segment);
+        if ($t === '') {
+            return [];
+        }
+        $byAbbrev = self::usStateAbbrevToNameLower();
+        if (mb_strlen($t) === 2 && ctype_alpha($t)) {
+            $abbr = mb_strtoupper($t);
+            if (! isset($byAbbrev[$abbr])) {
+                return [];
+            }
+            $full = $byAbbrev[$abbr];
+            $a = mb_strtolower($abbr);
+
+            return array_values(array_unique([
+                $full,
+                ', '.$a.',',
+                ', '.$a.' ',
+                ' '.$a.',',
+                ' '.$a.' ',
+            ]));
+        }
+        $needle = mb_strtolower($t);
+        foreach ($byAbbrev as $abbr => $full) {
+            if ($needle === $full) {
+                $a = mb_strtolower($abbr);
+
+                return array_values(array_unique([
+                    $full,
+                    ', '.$a.',',
+                    ', '.$a.' ',
+                    ' '.$a.',',
+                    ' '.$a.' ',
+                ]));
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Character length of trimmed textual location (address+city+state+country) for “sparse” detection.
+     */
+    protected static function sqlLocationConcatTrimCharLength(): string
+    {
+        return 'CHAR_LENGTH(TRIM(CONCAT_WS(\' \',
+            IFNULL(JSON_UNQUOTE(JSON_EXTRACT(additional_info, \'$.location.address\')), \'\'),
+            IFNULL(JSON_UNQUOTE(JSON_EXTRACT(additional_info, \'$.location.city\')), \'\'),
+            IFNULL(JSON_UNQUOTE(JSON_EXTRACT(additional_info, \'$.location.state\')), \'\'),
+            IFNULL(JSON_UNQUOTE(JSON_EXTRACT(additional_info, \'$.location.country\')), \'\')
+        )))';
+    }
+
+    /**
+     * Longest significant comma segment (or longest word) used as a loose anchor with radius.
+     */
+    protected static function primaryLocationAnchorNeedle(string $locationTrim): ?string
+    {
+        $parts = self::significantLocationSegments($locationTrim);
+        if ($parts !== []) {
+            usort($parts, fn ($a, $b) => mb_strlen($b) <=> mb_strlen($a));
+            $best = mb_strtolower(trim($parts[0]));
+            if (mb_strlen($best) >= 4) {
+                return $best;
+            }
+            $joined = mb_strtolower(trim(preg_replace('/\s*,\s*/u', ' ', $locationTrim) ?? ''));
+            if ($joined !== '' && $joined !== $best) {
+                return $joined;
+            }
+
+            return $best !== '' ? $best : null;
+        }
+        $flat = mb_strtolower(trim(preg_replace('/\s*,\s*/u', ' ', $locationTrim) ?? ''));
+        if ($flat === '') {
+            return null;
+        }
+        $words = preg_split('/\s+/u', $flat, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $longest = '';
+        foreach ($words as $w) {
+            if (mb_strlen($w) > mb_strlen($longest)) {
+                $longest = $w;
+            }
+        }
+        if (mb_strlen($longest) >= 3) {
+            return $longest;
+        }
+
+        return $flat;
+    }
+
+    /**
+     * Within search radius AND (primary place token appears in location text OR stored location text is sparse).
+     */
+    protected static function applyWithinRadiusAnchorOrSparseToQuery(
+        Builder $query,
+        string $locationTrim,
+        string $haversineSql,
+        array $bindings
+    ): void {
+        $blob = self::sqlLocationTextBlobLower();
+        $lenExpr = self::sqlLocationConcatTrimCharLength();
+        $anchor = self::primaryLocationAnchorNeedle($locationTrim);
+        $query->whereRaw($haversineSql, $bindings);
+        $query->where(function (Builder $b) use ($blob, $lenExpr, $anchor) {
+            if ($anchor !== null && $anchor !== '') {
+                $like = '%'.addcslashes($anchor, '%_\\').'%';
+                $b->whereRaw("({$blob}) LIKE ?", [$like]);
+            }
+            $b->orWhereRaw("({$lenExpr}) < 12");
+        });
+    }
+
+    /**
+     * Apply strict locality text: AND across significant comma segments on concatenated location fields.
+     */
+    protected static function applyLocationTextStrictToQuery(Builder $query, string $locationTrim): void
+    {
+        $blob = self::sqlLocationTextBlobLower();
+        $segments = self::significantLocationSegments($locationTrim);
+        if ($segments === []) {
+            $needle = mb_strtolower($locationTrim);
+            $like = '%'.addcslashes($needle, '%_\\').'%';
+            $query->whereRaw("({$blob}) LIKE ?", [$like]);
+
+            return;
+        }
+        foreach ($segments as $segment) {
+            if (self::applyUsStateSegmentToQuery($query, $segment)) {
+                continue;
+            }
+            $needles = self::segmentSearchNeedles($segment);
+            if ($needles === []) {
+                continue;
+            }
+            $query->where(function (Builder $q) use ($blob, $needles) {
+                foreach ($needles as $n) {
+                    $like = '%'.addcslashes($n, '%_\\').'%';
+                    $q->orWhereRaw("({$blob}) LIKE ?", [$like]);
+                }
+            });
+        }
+    }
+
+    /**
+     * US state abbrev / full name: match JSON `state` or comma-bounded abbrev in blob.
+     */
+    protected static function applyUsStateSegmentToQuery(Builder $query, string $segment): bool
+    {
+        $t = trim($segment);
+        if ($t === '') {
+            return false;
+        }
+        $byAbbrev = self::usStateAbbrevToNameLower();
+        $abbr = null;
+        $full = null;
+        if (mb_strlen($t) === 2 && ctype_alpha($t)) {
+            $abbr = mb_strtoupper($t);
+            if (! isset($byAbbrev[$abbr])) {
+                return false;
+            }
+            $full = $byAbbrev[$abbr];
+        } else {
+            $needle = mb_strtolower($t);
+            foreach ($byAbbrev as $a => $fn) {
+                if ($needle === $fn) {
+                    $abbr = $a;
+                    $full = $fn;
+                    break;
+                }
+            }
+            if ($abbr === null) {
+                return false;
+            }
+        }
+        $a = mb_strtolower($abbr);
+        $blob = self::sqlLocationTextBlobLower();
+        $stateExpr = 'LOWER(TRIM(IFNULL(JSON_UNQUOTE(JSON_EXTRACT(additional_info, \'$.location.state\')), \'\')))';
+        $query->where(function (Builder $q) use ($stateExpr, $a, $full, $blob) {
+            $q->whereRaw("({$stateExpr}) = ?", [$a])
+                ->orWhereRaw("({$stateExpr}) = ?", [$full])
+                ->orWhereRaw("({$stateExpr}) LIKE ?", ['%'.$full.'%']);
+            foreach (['%, '.$a.',%', '%, '.$a.' %', '% '.$a.',%', '% '.$a.' %'] as $pat) {
+                $q->orWhereRaw("({$blob}) LIKE ?", [$pat]);
+            }
+            $q->orWhereRaw("({$blob}) LIKE ?", ['%'.$full.'%']);
         });
 
-        if (isset($filters['lat'], $filters['long'], $filters['radius'])) {
-            $lat = $filters['lat'];
-            $long = $filters['long'];
-            $radius = max(0, min($filters['radius'] ?? 0, 500));
+        return true;
+    }
 
-            $query->whereRaw("
-                (6371 * acos(cos(radians(?)) * cos(radians(JSON_UNQUOTE(JSON_EXTRACT(additional_info, '$.location.lat'))))
-                * cos(radians(JSON_UNQUOTE(JSON_EXTRACT(additional_info, '$.location.long'))) - radians(?))
-                + sin(radians(?)) * sin(radians(JSON_UNQUOTE(JSON_EXTRACT(additional_info, '$.location.lat')))))) <= ?
-            ", [$lat, $long, $lat, $radius]);
-        }
+    /**
+     * Haversine distance (km) from search center to `additional_info.location` coordinates.
+     * Supports `lat`/`long`, `latitude`/`longitude`, and `lng` (same shapes as listingMapper / Firestore).
+     *
+     * Bindings: centerLat, centerLng, centerLat, maxDistanceKm.
+     */
+    public static function sqlHaversineKmWithinRadiusOnAdditionalInfo(): string
+    {
+        $latRad = self::sqlAdditionalInfoLatitudeRadiansExpr();
+        $lngRad = self::sqlAdditionalInfoLongitudeRadiansExpr();
+
+        return "(6371 * acos(
+            GREATEST(-1, LEAST(1,
+                cos(radians(?)) * cos({$latRad})
+                * cos({$lngRad} - radians(?))
+                + sin(radians(?)) * sin({$latRad})
+            ))
+        )) <= ?";
+    }
+
+    protected static function sqlAdditionalInfoLatitudeRadiansExpr(): string
+    {
+        return 'radians(CAST(COALESCE(
+            NULLIF(JSON_UNQUOTE(JSON_EXTRACT(additional_info, \'$.location.lat\')), \'\'),
+            NULLIF(JSON_UNQUOTE(JSON_EXTRACT(additional_info, \'$.location.latitude\')), \'\')
+        ) AS DECIMAL(12,8)))';
+    }
+
+    protected static function sqlAdditionalInfoLongitudeRadiansExpr(): string
+    {
+        return 'radians(CAST(COALESCE(
+            NULLIF(JSON_UNQUOTE(JSON_EXTRACT(additional_info, \'$.location.long\')), \'\'),
+            NULLIF(JSON_UNQUOTE(JSON_EXTRACT(additional_info, \'$.location.lng\')), \'\'),
+            NULLIF(JSON_UNQUOTE(JSON_EXTRACT(additional_info, \'$.location.longitude\')), \'\')
+        ) AS DECIMAL(12,8)))';
     }
 
     /**
