@@ -41,7 +41,7 @@
                     <td style="padding: 8px 0; border-bottom: 1px solid #eee;"><strong>Listing ID</strong></td>
                     <td style="padding: 8px 0; border-bottom: 1px solid #eee;">
                         {{ $claim->listing_id }} 
-                        <a href="{{ config('app.frontend_url') }}/listing/{{ $claim->listing_id }}" style="color:#2E86DE; text-decoration: none; margin-left: 10px;">(View Ad)</a>
+                        <a href="{{ config('app.frontend_url') }}/ads/{{ $claim->listing_id }}" style="color:#2E86DE; text-decoration: none; margin-left: 10px;">(View Ad)</a>
                     </td>
                 </tr>
                 <tr>

@@ -11,6 +11,7 @@ use App\Models\MessageParticipantHide;
 use App\Models\Store;
 use App\Models\User;
 use Exception;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -76,6 +77,15 @@ class ChatRepository extends BaseRepository
                     $participant['participant_type'] = @$other->participant_type;
                     $participant['name'] = @$other->participant->social_name;
 
+                    $otherModel = $other->participant;
+                    $meModel = $me->participant;
+                    $iBlockedOther = false;
+                    $otherBlockedMe = false;
+                    if ($otherModel instanceof Model && $meModel instanceof Model) {
+                        $iBlockedOther = $meModel->hasBlocked($otherModel);
+                        $otherBlockedMe = $otherModel->hasBlocked($meModel);
+                    }
+
                     return [
                         'id' => $conversation->id,
                         'participant' => $participant,
@@ -94,6 +104,8 @@ class ChatRepository extends BaseRepository
                         'last_message' => $this->lastVisibleMessagePayload($conversation, $me),
                         'unread_count' => $me->unread_count,
                         'updated_at' => $conversation->updated_at->toIso8601String(),
+                        'i_blocked_other' => $iBlockedOther,
+                        'other_blocked_me' => $otherBlockedMe,
                     ];
                 })
                 ->filter()
@@ -169,6 +181,13 @@ class ChatRepository extends BaseRepository
 //                (int) $data['recipient_id'],
 //                $recipientType
 //            );
+
+            $senderModel = $this->resolveParticipantEntity((int) $data['sender_id'], $senderType);
+            $recipientModel = $this->resolveParticipantEntity((int) $data['recipient_id'], $recipientType);
+            if (! $senderModel || ! $recipientModel) {
+                throw new ApiOperationFailedException('Invalid chat participant', 400);
+            }
+            $this->assertNoBlockBetween($senderModel, $recipientModel);
 
             return DB::transaction(function () use ($data, $senderType, $recipientType) {
                 $conversation = Conversation::whereHas('participants', function ($q) use ($data, $senderType) {
@@ -529,6 +548,35 @@ class ChatRepository extends BaseRepository
         }
 
         throw new ApiOperationFailedException('Invalid sender type', 400);
+    }
+
+    /**
+     * @return User|Store|null
+     */
+    private function resolveParticipantEntity(int $id, string $participantType): ?Model
+    {
+        $t = strtolower($participantType);
+        if ($t === 'store') {
+            return Store::query()->find($id);
+        }
+
+        return User::query()->find($id);
+    }
+
+    /**
+     * @param  User|Store  $a
+     * @param  User|Store  $b
+     *
+     * @throws ApiOperationFailedException
+     */
+    private function assertNoBlockBetween(Model $a, Model $b): void
+    {
+        if ($a->hasBlocked($b) || $b->hasBlocked($a)) {
+            throw new ApiOperationFailedException(
+                'Messaging is not available between these accounts.',
+                403
+            );
+        }
     }
 
     /**
