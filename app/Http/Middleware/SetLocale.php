@@ -16,17 +16,35 @@ class SetLocale
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $langHeader = $request->header('lang', 'en');
+        $langHeader = $request->header('lang')
+            ?? $request->header('X-Lang')
+            ?? $request->header('X-Locale');
 
-        // Map 'english' and 'spanish' to 'en' and 'es'
-        $locale = match (strtolower($langHeader)) {
+        if ($langHeader === null || trim((string) $langHeader) === '') {
+            $accept = (string) $request->header('Accept-Language', '');
+            if ($accept !== '') {
+                $first = trim(explode(',', $accept)[0]);
+                $tag = strtolower(trim(explode(';', $first)[0]));
+                // es-MX → es
+                if (preg_match('/^([a-z]{2})(?:-[a-z]{2,})?$/i', $tag, $m)) {
+                    $langHeader = strtolower($m[1]);
+                }
+            }
+        }
+        if ($langHeader === null || trim((string) $langHeader) === '') {
+            $langHeader = 'en';
+        }
+
+        $normalized = strtolower(trim((string) $langHeader));
+
+        // Map 'english' and 'spanish' to 'en' and 'es'. Default must use $normalized so `ES`/`EN` work (not raw header).
+        $locale = match ($normalized) {
             'spanish' => 'es',
             'english' => 'en',
-            default => $langHeader,
+            default => $normalized,
         };
 
-        // Validate if locale is supported, default to 'en' if not
-        if (!in_array($locale, ['en', 'es'])) {
+        if (! in_array($locale, ['en', 'es'], true)) {
             $locale = 'en';
         }
 

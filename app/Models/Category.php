@@ -87,11 +87,39 @@ class Category extends Model implements HasMedia
         return $this->resolvedConfigImageUrl('default_image_url');
     }
 
-    protected function normalizedCategoryNameKey(string $name): string
+    /**
+     * Normalized key for config maps (images, Spanish names) — lowercase, single spaces.
+     */
+    public static function normalizedNameKey(string $name): string
     {
         $name = trim(preg_replace('/\s+/', ' ', $name));
 
         return Str::lower($name);
+    }
+
+    protected function normalizedCategoryNameKey(string $name): string
+    {
+        return static::normalizedNameKey($name);
+    }
+
+    /**
+     * Display name for API responses; respects `lang` header via SetLocale middleware.
+     * System categories (`user_id` null): `lang/en.json` + `lang/es.json` keyed by normalized English name (lowercase).
+     */
+    public function localizedDisplayName(): string
+    {
+        $canonical = trim((string) $this->name);
+
+        if ($this->user_id !== null) {
+            return $canonical;
+        }
+
+        $key = static::normalizedNameKey($canonical);
+
+        // JSON lang files (`lang/en.json`, `lang/es.json`): missing keys fall back to $key string from __().
+        $translated = __($key);
+
+        return $translated !== $key ? $translated : $canonical;
     }
 
     protected function resolvedConfigImageUrl(string $configKey): string
