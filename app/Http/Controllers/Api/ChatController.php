@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Events\MessageDeleted;
 use App\Events\MessageSent;
 use App\Events\UserSocialRefresh;
-use App\Exceptions\ApiOperationFailedException;
 use App\Http\Controllers\Controller;
 use App\Models\Conversation;
 use App\Models\Listing;
@@ -120,13 +119,6 @@ class ChatController extends Controller
             }
 
             return $this->actionSuccess('Messages sent successfully', $messages);
-        } catch (ApiOperationFailedException $e) {
-            $code = $e->getCode();
-            if ($code < 400 || $code >= 600) {
-                $code = 400;
-            }
-
-            return $this->actionFailure($e->getMessage(), $e->data, $code);
         } catch (\Exception $e) {
             return $this->serverError($e->getMessage());
         }
