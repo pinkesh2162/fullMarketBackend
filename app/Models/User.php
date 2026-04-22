@@ -47,6 +47,37 @@ class User extends Authenticatable implements HasMedia
 
     const PROFILE = 'user';
 
+    /** @see \App\Repositories\Admin\AdminUserRepository for filters */
+    public const ACCOUNT_STATUS_ACTIVE = 'active';
+
+    public const ACCOUNT_STATUS_SUSPEND = 'suspend';
+
+    public const ACCOUNT_STATUS_BLOCKED = 'blocked';
+
+    public function publicAccountStatusForApi(): string
+    {
+        if ($this->trashed()) {
+            return 'deleted';
+        }
+
+        $s = (string) ($this->getAttributes()['account_status'] ?? self::ACCOUNT_STATUS_ACTIVE);
+
+        return in_array($s, [self::ACCOUNT_STATUS_ACTIVE, self::ACCOUNT_STATUS_SUSPEND, self::ACCOUNT_STATUS_BLOCKED], true)
+            ? $s
+            : self::ACCOUNT_STATUS_ACTIVE;
+    }
+
+    public function allowsAppLogin(): bool
+    {
+        if ($this->trashed()) {
+            return false;
+        }
+
+        $s = (string) ($this->getAttributes()['account_status'] ?? self::ACCOUNT_STATUS_ACTIVE);
+
+        return $s === self::ACCOUNT_STATUS_ACTIVE;
+    }
+
     /**
      * The attributes that should be hidden for serialization.
      *
@@ -82,6 +113,7 @@ class User extends Authenticatable implements HasMedia
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
         'location' => 'array',
+        'data' => 'array',
     ];
 
     public function getProfilePhotoAttribute()
