@@ -29,7 +29,7 @@ class ClaimRequest extends FormRequest
             'phone'      => 'required|string|max:20',
             'phone_code' => 'required|string|max:10',
             'description' => 'nullable|string',
-            'image'     => 'nullable|image|max:5120',
+            'image'     => 'nullable|image|max:40960',
         ];
     }
 }

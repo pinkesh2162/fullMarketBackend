@@ -122,7 +122,7 @@ class ListingController extends Controller
      */
     public function show($id): JsonResponse
     {
-        $listing = Listing::findOrFail($id);
+        $listing = Listing::with(['claims','user','store','category'])->findOrFail($id);
 
         if ($listing->user_id !== auth()->id()) {
             $this->listingRepo->incrementViews($listing);

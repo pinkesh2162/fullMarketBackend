@@ -2,13 +2,18 @@
 
 namespace App\Http\Resources;
 
+use App\Models\Claim;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use App\Repositories\ChatRepository;
 
 class ListingResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $user = auth('sanctum')->user();
+        $listing = $this->resource;
+
         return [
             'id' => $this->id,
             'user' => $this->user ? new UserResource($this->user) : null,
@@ -36,8 +41,21 @@ class ListingResource extends JsonResource
             'fual_type' => $this->fual_type,
             'transmission' => $this->transmission,
             'images' => $this->images,
+            'is_claim_added' => $listing->relationLoaded('claims')
+                ? $listing->claims->contains(fn (Claim $c) => (int) $c->claim_type === Claim::CLAIM)
+                : $listing->claims()->where('claim_type', Claim::CLAIM)->exists(),
+            'is_claim_removed' => $listing->relationLoaded('claims')
+                ? $listing->claims->contains(fn (Claim $c) => (int) $c->claim_type === Claim::REMOVE_AD)
+                : $listing->claims()->where('claim_type', Claim::REMOVE_AD)->exists(),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
+            // Optional auth: send Authorization: Bearer on GET get/listing/{id} (see OptionalSanctumAuth).
+            'has_messaged_seller' => $user
+                ? app(ChatRepository::class)->hasViewerMessagedListingSeller($user, $this->resource)
+                : false,
+            // 'has_messaged_for_this_listing' => $user
+            //     ? app(ChatRepository::class)->hasViewerMessagedForThisListing($user, $this->resource)
+            //     : false,
         ];
     }
 }
