@@ -32,7 +32,8 @@ class AdminUserResource extends JsonResource
             'description' => $u->description,
             'profile_photo' => $u->profile_photo,
             'country' => is_string($country) ? $country : null,
-            'os' => $this->inferOs($data),
+            'registered_from' => $u->registered_from ?? \App\Models\User::REGISTERED_FROM_WEB,
+            'os' => $this->inferOs((string) ($u->registered_from ?? ''), $data),
             'stores_count' => (int) ($u->stores_count ?? 0),
             'posts_count' => (int) ($u->listings_count ?? 0),
             'listings_count' => (int) ($u->listings_count ?? 0),
@@ -48,11 +49,16 @@ class AdminUserResource extends JsonResource
     /**
      * @param  array<string, mixed>  $data
      */
-    private function inferOs(array $data): ?string
+    private function inferOs(string $registeredFrom, array $data): ?string
     {
+        $registeredFrom = strtolower(trim($registeredFrom));
+        if (in_array($registeredFrom, ['android', 'ios', 'web'], true)) {
+            return $registeredFrom;
+        }
+
         $p = strtolower((string) ($data['platform'] ?? $data['device_platform'] ?? $data['deviceType'] ?? ''));
         if ($p === '') {
-            return null;
+            return 'web';
         }
         if (str_contains($p, 'android')) {
             return 'android';

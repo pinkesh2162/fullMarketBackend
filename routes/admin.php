@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\ListingController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Api\Admin\AdminNotificationController;
 use Illuminate\Support\Facades\Route;
@@ -8,18 +10,28 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['firebase.admin', 'throttle:admin-push'])
     ->post('admin/notifications/send', [AdminNotificationController::class, 'send']);
 
-Route::middleware(['throttle:admin-dashboard'])
-    ->get('admin/dashboard', [DashboardController::class, 'index']);
+Route::post('/admin/login', [AuthController::class, 'login']);
 
-Route::middleware(['throttle:admin-api'])->prefix('admin')
+Route::middleware(['auth:sanctum', 'admin'])
+    ->prefix('admin')
     ->group(function () {
-        Route::group(['prefix' => '/users'], function () {
-            Route::get('/countries', [UserController::class, 'countries']);
+        Route::post('logout', [AuthController::class, 'logout']);
+
+        Route::get('dashboard', [DashboardController::class, 'index']);
+
+        Route::prefix('users')->group(function () {
+            Route::get('countries', [UserController::class, 'countries']);
             Route::get('/', [UserController::class, 'index']);
             Route::post('/', [UserController::class, 'store']);
-            Route::get('/{id}', [UserController::class, 'show'])->whereNumber('id');
-            // Route::patch('/{id}', [UserController::class, 'update'])->whereNumber('id');
-            Route::post('/{id}', [UserController::class, 'update'])->whereNumber('id');
-            Route::delete('/{id}', [UserController::class, 'destroy'])->whereNumber('id');
+            Route::get('{id}', [UserController::class, 'show'])->whereNumber('id');
+            Route::post('{id}', [UserController::class, 'update'])->whereNumber('id');
+            Route::delete('{id}', [UserController::class, 'destroy'])->whereNumber('id');
         });
+
+        Route::get('listings/summary', [ListingController::class, 'summary']);
+        Route::get('listings', [ListingController::class, 'index']);
+        Route::get('listings/{id}', [ListingController::class, 'show'])->whereNumber('id');
+        Route::patch('listings/{id}/feature', [ListingController::class, 'feature'])->whereNumber('id');
+        Route::put('listings/{id}/feature', [ListingController::class, 'feature'])->whereNumber('id');
+        Route::delete('listings/{id}', [ListingController::class, 'destroy'])->whereNumber('id');
     });

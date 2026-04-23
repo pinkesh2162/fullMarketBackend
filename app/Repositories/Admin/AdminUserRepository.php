@@ -117,7 +117,9 @@ class AdminUserRepository
             'password' => (string) $request->input('password'),
             'phone' => $request->input('phone'),
             'phone_code' => $request->input('phone_code'),
-            // 'account_status' => $request->input('account_status', User::ACCOUNT_STATUS_ACTIVE),
+            'registered_from' => $request->input('registered_from', User::REGISTERED_FROM_WEB),
+            'role' => User::ROLE_USER,
+            'account_status' => $request->input('account_status', User::ACCOUNT_STATUS_ACTIVE),
             'unique_key' => $this->generateUniqueUserKey(),
             'email_verified_at' => now(),
         ]);
@@ -245,37 +247,18 @@ class AdminUserRepository
         if ($os === '' || $os === 'all') {
             return;
         }
+        if ($os === User::REGISTERED_FROM_WEB) {
+            $q->where('users.registered_from', User::REGISTERED_FROM_WEB);
+
+            return;
+        }
         if ($os === 'android') {
-            if (DB::getDriverName() === 'mysql') {
-                $q->where(function ($w) {
-                    $w->whereRaw('LOWER(JSON_UNQUOTE(JSON_EXTRACT(data, \'$.platform\'))) = ?', ['android'])
-                        ->orWhereRaw('LOWER(JSON_UNQUOTE(JSON_EXTRACT(data, \'$.device_platform\'))) = ?', ['android'])
-                        ->orWhereRaw('LOWER(JSON_UNQUOTE(JSON_EXTRACT(data, \'$.deviceType\'))) = ?', ['android']);
-                });
-            } else {
-                $q->where(function ($w) {
-                    $w->whereRaw('lower(json_extract(data, ?)) = ?', ['$.platform', 'android'])
-                        ->orWhereRaw('lower(json_extract(data, ?)) = ?', ['$.device_platform', 'android'])
-                        ->orWhereRaw('lower(json_extract(data, ?)) = ?', ['$.deviceType', 'android']);
-                });
-            }
+            $q->where('users.registered_from', User::REGISTERED_FROM_ANDROID);
 
             return;
         }
         if ($os === 'ios') {
-            if (DB::getDriverName() === 'mysql') {
-                $q->where(function ($w) {
-                    $w->whereRaw('LOWER(JSON_UNQUOTE(JSON_EXTRACT(data, \'$.platform\'))) in (?, ?)', ['ios', 'iphone'])
-                        ->orWhereRaw('LOWER(JSON_UNQUOTE(JSON_EXTRACT(data, \'$.device_platform\'))) = ?', ['ios'])
-                        ->orWhereRaw('LOWER(JSON_UNQUOTE(JSON_EXTRACT(data, \'$.deviceType\'))) in (?, ?)', ['ios', 'iphone']);
-                });
-            } else {
-                $q->where(function ($w) {
-                    $w->whereRaw("lower(json_extract(data, '$.platform')) in ('ios','iphone')")
-                        ->orWhereRaw("lower(json_extract(data, '$.device_platform')) = 'ios'")
-                        ->orWhereRaw("lower(json_extract(data, '$.deviceType')) in ('ios','iphone')");
-                });
-            }
+            $q->where('users.registered_from', User::REGISTERED_FROM_IOS);
         }
     }
 

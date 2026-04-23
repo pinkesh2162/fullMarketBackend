@@ -25,7 +25,7 @@ class UserController extends Controller
         $request->validate([
             'status' => 'nullable|in:all,active,suspend,blocked,deleted',
             'country' => 'nullable|string|max:120',
-            'os' => 'nullable|in:all,android,ios',
+            'os' => 'nullable|in:all,android,ios,web',
             'q' => 'nullable|string|max:255',
             'search' => 'nullable|string|max:255',
             'per_page' => 'nullable|integer|min:1|max:100',

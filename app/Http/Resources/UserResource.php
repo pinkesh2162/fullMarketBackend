@@ -22,6 +22,8 @@ class UserResource extends JsonResource
 
         return [
             'id' => $user->id,
+            'role' => (string) ($user->getAttributes()['role'] ?? \App\Models\User::ROLE_USER),
+            'registered_from' => (string) ($user->getAttributes()['registered_from'] ?? \App\Models\User::REGISTERED_FROM_WEB),
             'unique_key' => $user->unique_key,
             'first_name' => $user->first_name,
             'last_name' => $user->last_name,

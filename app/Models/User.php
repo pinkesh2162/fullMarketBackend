@@ -43,9 +43,22 @@ class User extends Authenticatable implements HasMedia
         'fcm_token',
         'data',
         'deleted_at',
+        'role',
+        'account_status',
+        'registered_from',
     ];
 
     const PROFILE = 'user';
+
+    public const ROLE_USER = 'user';
+
+    public const ROLE_ADMIN = 'admin';
+
+    public const REGISTERED_FROM_ANDROID = 'android';
+
+    public const REGISTERED_FROM_IOS = 'ios';
+
+    public const REGISTERED_FROM_WEB = 'web';
 
     /** @see \App\Repositories\Admin\AdminUserRepository for filters */
     public const ACCOUNT_STATUS_ACTIVE = 'active';
@@ -76,6 +89,11 @@ class User extends Authenticatable implements HasMedia
         $s = (string) ($this->getAttributes()['account_status'] ?? self::ACCOUNT_STATUS_ACTIVE);
 
         return $s === self::ACCOUNT_STATUS_ACTIVE;
+    }
+
+    public function isAdminRole(): bool
+    {
+        return (string) ($this->getAttributes()['role'] ?? self::ROLE_USER) === self::ROLE_ADMIN;
     }
 
     /**

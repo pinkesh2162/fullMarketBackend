@@ -84,6 +84,8 @@ class UserRepository extends BaseRepository
                 $data['otp'] = $otp;
                 $data['otp_expires_at'] = now()->addMinutes(10);
                 $data['unique_key'] = $this->generateUniqueUserKey();
+                $data['role'] = User::ROLE_USER;
+                $data['registered_from'] = $this->resolveRegisteredFrom($request->input('registered_from'), $request->input('data'));
 
                 $user = $this->create($data);
 
@@ -200,6 +202,8 @@ class UserRepository extends BaseRepository
                 'provider' => $provider,
                 'provider_id' => $providerId,
                 'password' => Hash::make(Str::random(24)),
+                'role' => User::ROLE_USER,
+                'registered_from' => User::REGISTERED_FROM_WEB,
                 'email_verified_at' => ($userInfo['emailVerified'] ?? false) ? now() : null,
             ]);
         }
@@ -365,6 +369,28 @@ class UserRepository extends BaseRepository
         } while (User::where('unique_key', $code)->exists());
 
         return $code;
+    }
+
+    /**
+     * @param  mixed  $registeredFrom
+     * @param  mixed  $data
+     */
+    private function resolveRegisteredFrom($registeredFrom, $data): string
+    {
+        $candidate = strtolower(trim((string) $registeredFrom));
+        if ($candidate === '') {
+            $sourceData = is_array($data) ? $data : [];
+            $candidate = strtolower((string) ($sourceData['platform'] ?? $sourceData['device_platform'] ?? $sourceData['deviceType'] ?? ''));
+        }
+
+        if ($candidate === User::REGISTERED_FROM_ANDROID) {
+            return User::REGISTERED_FROM_ANDROID;
+        }
+        if ($candidate === User::REGISTERED_FROM_IOS || $candidate === 'iphone') {
+            return User::REGISTERED_FROM_IOS;
+        }
+
+        return User::REGISTERED_FROM_WEB;
     }
 
     /**

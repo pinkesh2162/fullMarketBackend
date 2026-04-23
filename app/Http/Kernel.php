@@ -6,6 +6,7 @@ use App\Http\Middleware\Authenticate;
 use App\Http\Middleware\EncryptCookies;
 use App\Http\Middleware\EnsureAdminBroadcastSecret;
 use App\Http\Middleware\EnsureFirebaseAdmin;
+use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\PreventRequestsDuringMaintenance;
 use App\Http\Middleware\RedirectIfAuthenticated;
 use App\Http\Middleware\SetLocale;
@@ -92,6 +93,7 @@ class Kernel extends HttpKernel
         'throttle' => ThrottleRequests::class,
         'verified' => EnsureEmailIsVerified::class,
         'firebase.admin' => EnsureFirebaseAdmin::class,
+        'admin' => EnsureUserIsAdmin::class,
         'admin.broadcast' => EnsureAdminBroadcastSecret::class,
     ];
 }

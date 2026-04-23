@@ -54,6 +54,14 @@ class AuthController extends Controller
             return $this->actionFailure('invalid_credentials', null, self::HTTP_UNPROCESSABLE_ENTITY);
         }
 
+        if ($user->isAdminRole()) {
+            return $this->actionFailure('admin_login_required', null, self::HTTP_FORBIDDEN);
+        }
+
+        if (! $user->allowsAppLogin()) {
+            return $this->actionFailure('account_disabled', null, self::HTTP_FORBIDDEN);
+        }
+
         if (! $user->email_verified_at) {
             return $this->actionFailure('otp_not_verified', null, 403);
         }

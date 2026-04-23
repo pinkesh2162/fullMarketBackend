@@ -40,6 +40,8 @@ class Listing extends Model implements HasMedia
         'bathrooms',
         'advance_options',
         'views_count',
+        'is_featured',
+        'featured_at',
         'vehicle_type',
         'vehical_info',
         'fual_type',
@@ -85,6 +87,8 @@ class Listing extends Model implements HasMedia
         'additional_info' => 'array',
         'advance_options' => 'array',
         'vehical_info' => 'array',
+        'is_featured' => 'boolean',
+        'featured_at' => 'datetime',
     ];
 
     public function user(): BelongsTo
@@ -105,6 +109,11 @@ class Listing extends Model implements HasMedia
     public function claims(): HasMany
     {
         return $this->hasMany(Claim::class);
+    }
+
+    public function reports(): HasMany
+    {
+        return $this->hasMany(ListingReport::class);
     }
 
     /**

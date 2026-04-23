@@ -4,9 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
+use App\Repositories\UserRepository;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use App\Repositories\UserRepository;
 
 class SocialAuthController extends Controller
 {
@@ -29,6 +29,14 @@ class SocialAuthController extends Controller
         $provider = Str::before($request->connection, '-'); // e.g. "google-oauth2" -> "google"
 
         $user = $this->userRepo->handleAppSocialLogin($provider, $request->all());
+
+        if ($user->isAdminRole()) {
+            return $this->actionFailure('admin_login_required', null, self::HTTP_FORBIDDEN);
+        }
+
+        if (! $user->allowsAppLogin()) {
+            return $this->actionFailure('account_disabled', null, self::HTTP_FORBIDDEN);
+        }
 
         $token = $user->createToken('auth_token')->plainTextToken;
 

@@ -23,17 +23,18 @@ class UserRegisterRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name'       => 'nullable|string|max:255',
-            'first_name'    => 'required_without:name|string|max:255',
-            'last_name'     => 'nullable|string|max:255',
-            'email'         => 'required|string|email|max:255|unique:users,email,NULL,id,deleted_at,NULL',
-            'password'      => 'required|string|min:8',
-            'phone'         => 'nullable|string|max:20',
-            'phone_code'    => 'nullable|string|max:10',
-            'location'      => 'nullable|string|max:255',
-            'description'   => 'nullable|string',
+            'name' => 'nullable|string|max:255',
+            'first_name' => 'required_without:name|string|max:255',
+            'last_name' => 'nullable|string|max:255',
+            'email' => 'required|string|email|max:255|unique:users,email,NULL,id,deleted_at,NULL',
+            'password' => 'required|string|min:8',
+            'phone' => 'nullable|string|max:20',
+            'phone_code' => 'nullable|string|max:10',
+            'registered_from' => 'nullable|in:android,ios,web',
+            'location' => 'nullable|string|max:255',
+            'description' => 'nullable|string',
             'profile_photo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
-            'lang'          => 'nullable|string|max:10',
+            'lang' => 'nullable|string|max:10',
         ];
     }
 }
