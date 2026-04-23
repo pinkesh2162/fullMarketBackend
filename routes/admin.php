@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AuthController;
+use App\Http\Controllers\Admin\ClaimController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\ListingController;
 use App\Http\Controllers\Admin\UserController;
@@ -34,4 +35,11 @@ Route::middleware(['auth:sanctum', 'admin'])
         Route::patch('listings/{id}/feature', [ListingController::class, 'feature'])->whereNumber('id');
         Route::put('listings/{id}/feature', [ListingController::class, 'feature'])->whereNumber('id');
         Route::delete('listings/{id}', [ListingController::class, 'destroy'])->whereNumber('id');
+
+        Route::get('claims/summary', [ClaimController::class, 'summary']);
+        Route::get('claims', [ClaimController::class, 'index']);
+        Route::get('claims/{id}', [ClaimController::class, 'show'])->whereNumber('id');
+        // Route::patch('claims/{id}/status', [ClaimController::class, 'changeStatus'])->whereNumber('id');
+        Route::post('claims/{id}/status', [ClaimController::class, 'changeStatus'])->whereNumber('id');
+        Route::delete('claims/{id}', [ClaimController::class, 'destroy'])->whereNumber('id');
     });
