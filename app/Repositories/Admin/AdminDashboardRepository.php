@@ -22,7 +22,7 @@ class AdminDashboardRepository
         $isMysql = DB::getDriverName() === 'mysql';
         $lastActivitySql = $this->lastUserActivityExpression($isMysql);
 
-        $userBase = User::query()->whereNull('deleted_at');
+        $userBase = User::query()->withTrashed();
         $totalUsers = (clone $userBase)->count();
 
         $isAll = $period === 'all' || $period === '';
@@ -30,11 +30,11 @@ class AdminDashboardRepository
             $allStart = $now->copy()->subDays($allWindowDays - 1)->startOfDay();
             $allPrevEnd = $allStart->copy()->subSecond();
             $allPrevStart = $allStart->copy()->subDays($allWindowDays)->startOfDay();
-            $newUsersCurrent = (clone $userBase)->whereBetween('created_at', [$allStart, $now])->count();
-            $newUsersPrevious = (clone $userBase)->whereBetween('created_at', [$allPrevStart, $allPrevEnd])->count();
+            $newUsersCurrent = (clone $userBase)->whereNull('deleted_at')->whereBetween('created_at', [$allStart, $now])->count();
+            $newUsersPrevious = (clone $userBase)->whereNull('deleted_at')->whereBetween('created_at', [$allPrevStart, $allPrevEnd])->count();
         } else {
-            $newUsersCurrent = (clone $userBase)->whereBetween('created_at', [$currentStart, $currentEnd])->count();
-            $newUsersPrevious = (clone $userBase)->whereBetween('created_at', [$prevStart, $prevEnd])->count();
+            $newUsersCurrent = (clone $userBase)->whereNull('deleted_at')->whereBetween('created_at', [$currentStart, $currentEnd])->count();
+            $newUsersPrevious = (clone $userBase)->whereNull('deleted_at')->whereBetween('created_at', [$prevStart, $prevEnd])->count();
         }
 
         $mauStart = $now->copy()->subDays(30);
@@ -46,11 +46,12 @@ class AdminDashboardRepository
         $mauPrevious = $this->countActiveInRange($userBase, $lastActivitySql, $mauPrevStart, $mauPrevEnd, $isMysql);
         if ($isAll) {
             // "Active (all time)" => verified users (not deleted)
-            $activeCurrent = (clone $userBase)->whereNotNull('email_verified_at')->count();
+            $activeCurrent = (clone $userBase)->whereNull('deleted_at')->whereNotNull('email_verified_at')->count();
             $allStart = $now->copy()->subDays($allWindowDays - 1)->startOfDay();
             $allPrevEnd = $allStart->copy()->subSecond();
             $allPrevStart = $allStart->copy()->subDays($allWindowDays)->startOfDay();
             $activePrevious = (clone $userBase)
+                ->whereNull('deleted_at')
                 ->whereNotNull('email_verified_at')
                 ->where('created_at', '<=', $allPrevEnd)
                 ->where(function ($q) use ($allPrevStart) {
@@ -198,7 +199,7 @@ class AdminDashboardRepository
             'total_users' => [
                 'value' => $totalUsers,
                 'trend_percent' => $totalUsersTrend,
-                'description' => 'All users not deleted.',
+                'description' => 'All users.',
             ],
             'active' => [
                 'value' => $activeCurrent,

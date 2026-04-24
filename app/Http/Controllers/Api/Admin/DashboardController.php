@@ -15,7 +15,7 @@ class DashboardController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $period = (string) $request->query('period', 'week');
+        $period = (string) $request->query('period', 'month');
         if (! in_array($period, ['today', 'week', 'month', 'all'], true)) {
             return $this->validationFailed('Invalid period. Use today, week, month, or all.', [
                 'period' => ['The period must be one of: today, week, month, all.'],
