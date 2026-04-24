@@ -71,4 +71,17 @@ class ListingController extends Controller
 
         return $this->actionSuccess('admin_listing_deleted');
     }
+
+    public function restore(int $id): JsonResponse
+    {
+        $listing = $this->listings->findForAdmin($id);
+        if (! $listing->trashed()) {
+            return $this->actionFailure('admin_listing_not_deleted', null, self::HTTP_CONFLICT);
+        }
+
+        $listing = $this->listings->restore($listing);
+        $listing->loadCount('reports as reports_count');
+
+        return $this->actionSuccess('admin_listing_restored', new AdminListingResource($listing));
+    }
 }

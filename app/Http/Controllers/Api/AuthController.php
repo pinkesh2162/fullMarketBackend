@@ -68,6 +68,7 @@ class AuthController extends Controller
 
         try {
             $this->userRepo->syncRegisteredFromOnLogin($user, $request);
+            $this->userRepo->touchLastLoginAt($user);
             $user->refresh();
             $this->ensureUniqueKeysOnLogin($user);
             $user->loadMissing(['media', 'store', 'stores']);

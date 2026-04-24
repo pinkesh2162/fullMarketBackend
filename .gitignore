@@ -13,16 +13,13 @@
 
 /auth.json
 /node_modules
-/public/build
-/public/hot
-/public/storage
+/public
 /storage/*.key
 /storage/pail
 /vendor
 Homestead.json
 Homestead.yaml
 Thumbs.db
-/public/uploads
 /firebase_service_account.json
 /serviceAccountKey.json
 config.bat

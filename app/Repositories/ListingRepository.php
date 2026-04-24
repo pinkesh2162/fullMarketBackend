@@ -131,7 +131,10 @@ class ListingRepository extends BaseRepository
 
         $hideAds = $filters['hide_ads'] ?? $user?->settings?->hide_ads ?? false;
 
-        $query = $this->allQuery()->with(['media'])->filter($filters);
+        $query = $this->allQuery()
+        ->orderByDesc('is_featured')
+        ->orderByDesc('featured_at')
+        ->with(['media'])->filter($filters);
 
         if ($hideAds) {
             $query->where('service_type', '!=', Listing::OFFER_SERVICE);

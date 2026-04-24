@@ -32,9 +32,10 @@ Route::middleware(['auth:sanctum', 'admin'])
         Route::get('listings/summary', [ListingController::class, 'summary']);
         Route::get('listings', [ListingController::class, 'index']);
         Route::get('listings/{id}', [ListingController::class, 'show'])->whereNumber('id');
-        Route::patch('listings/{id}/feature', [ListingController::class, 'feature'])->whereNumber('id');
-        Route::put('listings/{id}/feature', [ListingController::class, 'feature'])->whereNumber('id');
+        // Route::patch('listings/{id}/feature', [ListingController::class, 'feature'])->whereNumber('id');
+        Route::post('listings/{id}/feature', [ListingController::class, 'feature'])->whereNumber('id');
         Route::delete('listings/{id}', [ListingController::class, 'destroy'])->whereNumber('id');
+        Route::post('listings/{id}/restore', [ListingController::class, 'restore'])->whereNumber('id');
 
         Route::get('claims/summary', [ClaimController::class, 'summary']);
         Route::get('claims', [ClaimController::class, 'index']);

@@ -79,6 +79,19 @@ class AdminListingRepository
         $listing->delete();
     }
 
+    public function restore(Listing $listing): Listing
+    {
+        if (! $listing->trashed()) {
+            return $listing->fresh(['store', 'category', 'user', 'media']);
+        }
+
+        $listing->restore();
+        $listing->featured_at = $listing->is_featured ? ($listing->featured_at ?? now()) : null;
+        $listing->save();
+
+        return $listing->fresh(['store', 'category', 'user', 'media']);
+    }
+
     /**
      * @param  \Illuminate\Database\Eloquent\Builder<Listing>  $q
      */

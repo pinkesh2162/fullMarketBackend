@@ -3,9 +3,7 @@
 namespace App\Repositories\Admin;
 
 use App\Models\Listing;
-use App\Models\ListingReport;
 use App\Models\User;
-use App\Models\UserReport;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -19,6 +17,7 @@ class AdminDashboardRepository
     {
         $now = now();
         [$currentStart, $currentEnd, $prevStart, $prevEnd, $chartStart, $chartEnd, $chartDayCount] = $this->resolveTimeWindows($period, $now);
+        $allWindowDays = max(1, (int) config('admin_dashboard.all_period_chart_days', 90));
 
         $isMysql = DB::getDriverName() === 'mysql';
         $lastActivitySql = $this->lastUserActivityExpression($isMysql);
@@ -28,8 +27,11 @@ class AdminDashboardRepository
 
         $isAll = $period === 'all' || $period === '';
         if ($isAll) {
-            $newUsersCurrent = $totalUsers;
-            $newUsersPrevious = 0;
+            $allStart = $now->copy()->subDays($allWindowDays - 1)->startOfDay();
+            $allPrevEnd = $allStart->copy()->subSecond();
+            $allPrevStart = $allStart->copy()->subDays($allWindowDays)->startOfDay();
+            $newUsersCurrent = (clone $userBase)->whereBetween('created_at', [$allStart, $now])->count();
+            $newUsersPrevious = (clone $userBase)->whereBetween('created_at', [$allPrevStart, $allPrevEnd])->count();
         } else {
             $newUsersCurrent = (clone $userBase)->whereBetween('created_at', [$currentStart, $currentEnd])->count();
             $newUsersPrevious = (clone $userBase)->whereBetween('created_at', [$prevStart, $prevEnd])->count();
@@ -42,14 +44,28 @@ class AdminDashboardRepository
 
         $mauCurrent = $this->countActiveInRange($userBase, $lastActivitySql, $mauStart, $mauEnd, $isMysql);
         $mauPrevious = $this->countActiveInRange($userBase, $lastActivitySql, $mauPrevStart, $mauPrevEnd, $isMysql);
+        if ($isAll) {
+            // "Active (all time)" => verified users (not deleted)
+            $activeCurrent = (clone $userBase)->whereNotNull('email_verified_at')->count();
+            $allStart = $now->copy()->subDays($allWindowDays - 1)->startOfDay();
+            $allPrevEnd = $allStart->copy()->subSecond();
+            $allPrevStart = $allStart->copy()->subDays($allWindowDays)->startOfDay();
+            $activePrevious = (clone $userBase)
+                ->whereNotNull('email_verified_at')
+                ->where('created_at', '<=', $allPrevEnd)
+                ->where(function ($q) use ($allPrevStart) {
+                    $q->whereNull('email_verified_at')
+                        ->orWhere('email_verified_at', '>=', $allPrevStart);
+                })
+                ->count();
+        } else {
+            $activeCurrent = $this->countActiveInRange($userBase, $lastActivitySql, $currentStart, $currentEnd, $isMysql);
+            $activePrevious = $this->countActiveInRange($userBase, $lastActivitySql, $prevStart, $prevEnd, $isMysql);
+        }
 
-        /** UI label "Active (this week)" — last 7 rolling days, compared to the prior 7 full days. */
-        $thisWeekStart = $now->copy()->subDays(6)->startOfDay();
-        $thisWeekEnd = $now->copy();
-        $prevWeekStart = $thisWeekStart->copy()->subDays(7);
-        $prevWeekEnd = $thisWeekStart->copy()->subSecond();
-        $activeThisWeek = $this->countActiveInRange($userBase, $lastActivitySql, $thisWeekStart, $thisWeekEnd, $isMysql);
-        $activeLastWeek = $this->countActiveInRange($userBase, $lastActivitySql, $prevWeekStart, $prevWeekEnd, $isMysql);
+        $totalUsersPrevious = $isAll
+            ? (clone $userBase)->where('created_at', '<=', $now->copy()->subDays($allWindowDays))->count()
+            : (clone $userBase)->where('created_at', '<=', $prevEnd)->count();
 
         $minViews = (int) config('admin_push.featured_listing_min_views', 25);
         $postsPerDay = $this->postsPerDay($chartStart, $chartEnd, $chartDayCount, $minViews);
@@ -65,13 +81,16 @@ class AdminDashboardRepository
             ],
             'user_stats' => $this->buildKpis(
                 $totalUsers,
+                $totalUsersPrevious,
                 $newUsersCurrent,
                 $newUsersPrevious,
                 $mauCurrent,
                 $mauPrevious,
-                $activeThisWeek,
-                $activeLastWeek,
-                $isAll
+                $activeCurrent,
+                $activePrevious,
+                $isAll,
+                $period,
+                $allWindowDays
             ),
             'registration_sources' => $this->registrationSources($userBase, $currentStart, $currentEnd, $isMysql),
             'activity_charts' => [
@@ -152,35 +171,39 @@ class AdminDashboardRepository
      */
     private function buildKpis(
         int $totalUsers,
+        int $totalUsersPrevious,
         int $newUsersCurrent,
         int $newUsersPrevious,
         int $mauCurrent,
         int $mauPrevious,
-        int $activeThisWeek,
-        int $activeLastWeek,
+        int $activeCurrent,
+        int $activePrevious,
         bool $isAllPeriod,
+        string $period,
+        int $allWindowDays,
     ): array {
-        $pending = ListingReport::query()->where('status', 'pending')->count()
-            + UserReport::query()->where('status', 'pending')->count();
+        $totalUsersTrend = $this->periodOverPeriodChange($totalUsers, $totalUsersPrevious);
 
-        $userQ = User::query()->whereNull('deleted_at');
-        $weekStart = now()->copy()->subDays(6)->startOfDay();
-        $netNewThisWeek = (clone $userQ)->whereBetween('created_at', [$weekStart, now()])->count();
-        $userCountAtWeekStart = (clone $userQ)->where('created_at', '<', $weekStart)->count();
-        $totalUsersTrend = $this->trendFromPreviousBase($netNewThisWeek, $userCountAtWeekStart);
+        $newUsersTrend = $this->periodOverPeriodChange($newUsersCurrent, $newUsersPrevious);
+        $activeTrend = $isAllPeriod ? null : $this->periodOverPeriodChange($activeCurrent, $activePrevious);
 
-        $newUsersTrend = $isAllPeriod ? null : $this->periodOverPeriodChange($newUsersCurrent, $newUsersPrevious);
+        $activeDescription = match ($period) {
+            'today' => 'Daily active users today vs yesterday.',
+            'week' => 'Active users in the last 7 days vs previous 7 days.',
+            'month' => 'Active users in the last 30 days vs previous 30 days.',
+            default => 'All verified users (not deleted).',
+        };
 
         return [
             'total_users' => [
                 'value' => $totalUsers,
                 'trend_percent' => $totalUsersTrend,
-                'description' => 'All registered users (excluding soft-deleted). Trend: net new in last 7d vs. user count at start of that window.',
+                'description' => 'All users not deleted.',
             ],
             'active' => [
-                'value' => $activeThisWeek,
-                'trend_percent' => $this->periodOverPeriodChange($activeThisWeek, $activeLastWeek),
-                'description' => 'Users with last active timestamp in the last 7 rolling days; trend vs. the prior 7 full days (matches "Active (this week)").',
+                'value' => $activeCurrent,
+                'trend_percent' => $activeTrend,
+                'description' => $activeDescription,
             ],
             'mau' => [
                 'value' => $mauCurrent,
@@ -190,17 +213,19 @@ class AdminDashboardRepository
             'new_users' => [
                 'value' => $newUsersCurrent,
                 'trend_percent' => $newUsersTrend,
-                'description' => 'New signups in the time range filter (all time = total users if period is "all").',
+                'description' => $isAllPeriod
+                    ? "New signups in last {$allWindowDays} days (vs previous {$allWindowDays} days)."
+                    : 'New signups in selected period vs previous equivalent period.',
             ],
             'downloads' => [
-                'value' => null,
+                'value' => 0,
                 'trend_percent' => null,
                 'note' => 'not_tracked',
             ],
             'pending_reports' => [
-                'value' => $pending,
+                'value' => 0,
                 'trend_percent' => null,
-                'description' => 'Listing + user reports with status "pending" (all time).',
+                'description' => 'Reserved for future implementation.',
             ],
         ];
     }
@@ -226,10 +251,11 @@ class AdminDashboardRepository
     private function lastUserActivityExpression(bool $isMysql): string
     {
         if (! $isMysql) {
-            return 'updated_at';
+            return 'COALESCE(last_login_at, updated_at)';
         }
 
         return "COALESCE(
+        last_login_at,
         FROM_UNIXTIME(CAST(JSON_EXTRACT(data, '$.lastLoginAt._seconds') AS UNSIGNED)),
         FROM_UNIXTIME(CAST(JSON_EXTRACT(data, '$.lastSignInTime._seconds') AS UNSIGNED)),
         updated_at
@@ -241,11 +267,15 @@ class AdminDashboardRepository
      */
     private function countActiveInRange($userBase, string $lastActivitySql, Carbon $start, Carbon $end, bool $isMysql): int
     {
-        $q = (clone $userBase)->getQuery();
         if (! $isMysql) {
             return (clone $userBase)
-                ->where('updated_at', '<=', $end)
-                ->where('updated_at', '>=', $start)
+                ->where(function ($w) use ($start, $end) {
+                    $w->whereBetween('last_login_at', [$start, $end])
+                        ->orWhere(function ($f) use ($start, $end) {
+                            $f->whereNull('last_login_at')
+                                ->whereBetween('updated_at', [$start, $end]);
+                        });
+                })
                 ->count();
         }
 

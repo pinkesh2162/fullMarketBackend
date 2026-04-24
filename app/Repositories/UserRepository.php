@@ -214,6 +214,8 @@ class UserRepository extends BaseRepository
         if ($request) {
             $this->syncRegisteredFromOnLogin($user, $request);
         }
+        $this->touchLastLoginAt($user);
+        $user->refresh();
 
         // Handle profile picture from URL if provided and user doesn't have one or it changed
         if (isset($userInfo['picture']) && ! empty($userInfo['picture'])) {
@@ -297,6 +299,8 @@ class UserRepository extends BaseRepository
             $this->syncRegisteredFromOnLogin($user, $request);
             $user->refresh();
         }
+        $this->touchLastLoginAt($user);
+        $user->refresh();
 
         // Retrieve temporary password if available
         $password = Cache::pull('user_pass_'.$user->email);
@@ -446,6 +450,11 @@ class UserRepository extends BaseRepository
         }
 
         $user->update(['registered_from' => $next]);
+    }
+
+    public function touchLastLoginAt(User $user): void
+    {
+        $user->forceFill(['last_login_at' => now()])->save();
     }
 
     private function normalizePlatformCandidate(mixed $raw): ?string

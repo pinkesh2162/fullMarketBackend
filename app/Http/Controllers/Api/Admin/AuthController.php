@@ -36,6 +36,7 @@ class AuthController extends Controller
         }
 
         try {
+            $user->forceFill(['last_login_at' => now()])->save();
             $user->loadMissing(['media', 'store', 'stores']);
             $token = $user->createToken('admin_token')->plainTextToken;
 

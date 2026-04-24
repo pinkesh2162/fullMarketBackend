@@ -40,6 +40,7 @@ class User extends Authenticatable implements HasMedia
         'otp',
         'otp_expires_at',
         'email_verified_at',
+        'last_login_at',
         'fcm_token',
         'data',
         'deleted_at',
@@ -129,6 +130,7 @@ class User extends Authenticatable implements HasMedia
 
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'last_login_at' => 'datetime',
         'password' => 'hashed',
         'location' => 'array',
         'data' => 'array',
