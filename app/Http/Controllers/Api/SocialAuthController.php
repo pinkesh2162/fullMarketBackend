@@ -28,7 +28,7 @@ class SocialAuthController extends Controller
 
         $provider = Str::before($request->connection, '-'); // e.g. "google-oauth2" -> "google"
 
-        $user = $this->userRepo->handleAppSocialLogin($provider, $request->all());
+        $user = $this->userRepo->handleAppSocialLogin($provider, $request->all(), $request);
 
         if ($user->isAdminRole()) {
             return $this->actionFailure('admin_login_required', null, self::HTTP_FORBIDDEN);

@@ -18,6 +18,7 @@ use Illuminate\Container\Container as Application;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -85,7 +86,7 @@ class UserRepository extends BaseRepository
                 $data['otp_expires_at'] = now()->addMinutes(10);
                 $data['unique_key'] = $this->generateUniqueUserKey();
                 $data['role'] = User::ROLE_USER;
-                $data['registered_from'] = $this->resolveRegisteredFrom($request->input('registered_from'), $request->input('data'));
+                $data['registered_from'] = $this->resolveRegisteredFromRequest($request);
 
                 $user = $this->create($data);
 
@@ -146,7 +147,7 @@ class UserRepository extends BaseRepository
     /**
      * @return Builder|Model|object
      */
-    public function handleAppSocialLogin(string $provider, array $appSocialUser)
+    public function handleAppSocialLogin(string $provider, array $appSocialUser, ?Request $request = null)
     {
         $userInfo = $appSocialUser['userInfo'] ?? [];
         $providerId = $userInfo['sub'] ?? null;
@@ -203,9 +204,15 @@ class UserRepository extends BaseRepository
                 'provider_id' => $providerId,
                 'password' => Hash::make(Str::random(24)),
                 'role' => User::ROLE_USER,
-                'registered_from' => User::REGISTERED_FROM_WEB,
+                'registered_from' => $request
+                    ? $this->resolveRegisteredFromRequest($request)
+                    : User::REGISTERED_FROM_WEB,
                 'email_verified_at' => ($userInfo['emailVerified'] ?? false) ? now() : null,
             ]);
+        }
+
+        if ($request) {
+            $this->syncRegisteredFromOnLogin($user, $request);
         }
 
         // Handle profile picture from URL if provided and user doesn't have one or it changed
@@ -260,7 +267,7 @@ class UserRepository extends BaseRepository
      *
      * @throws ApiOperationFailedException
      */
-    public function verifyOtp($email, $otp)
+    public function verifyOtp($email, $otp, ?Request $request = null)
     {
         $user = User::with('media')->where('email', $email)->first();
 
@@ -285,6 +292,11 @@ class UserRepository extends BaseRepository
             'otp' => null,
             'otp_expires_at' => null,
         ]);
+
+        if ($request) {
+            $this->syncRegisteredFromOnLogin($user, $request);
+            $user->refresh();
+        }
 
         // Retrieve temporary password if available
         $password = Cache::pull('user_pass_'.$user->email);
@@ -372,25 +384,87 @@ class UserRepository extends BaseRepository
     }
 
     /**
-     * @param  mixed  $registeredFrom
-     * @param  mixed  $data
+     * Resolves app vs web from body fields, custom headers, and User-Agent.
+     * Clients may send: registered_from, X-Registered-From, X-App-Platform, X-Client-OS, or platform inside `data` JSON.
      */
-    private function resolveRegisteredFrom($registeredFrom, $data): string
+    public function resolveRegisteredFromRequest(Request $request): string
     {
-        $candidate = strtolower(trim((string) $registeredFrom));
-        if ($candidate === '') {
-            $sourceData = is_array($data) ? $data : [];
-            $candidate = strtolower((string) ($sourceData['platform'] ?? $sourceData['device_platform'] ?? $sourceData['deviceType'] ?? ''));
+        $candidates = [
+            $request->input('registered_from'),
+            $request->header('X-Registered-From'),
+            $request->header('X-App-Platform'),
+            $request->header('X-Client-OS'),
+            $request->header('X-Platform'),
+            $request->header('X-OS'),
+        ];
+
+        foreach ($candidates as $raw) {
+            $n = $this->normalizePlatformCandidate($raw);
+            if ($n !== null) {
+                return $n;
+            }
         }
 
-        if ($candidate === User::REGISTERED_FROM_ANDROID) {
-            return User::REGISTERED_FROM_ANDROID;
+        $data = $request->input('data');
+        if (is_string($data) && $data !== '') {
+            $decoded = json_decode($data, true);
+            $data = is_array($decoded) ? $decoded : [];
         }
-        if ($candidate === User::REGISTERED_FROM_IOS || $candidate === 'iphone') {
+        if (! is_array($data)) {
+            $data = [];
+        }
+        $fromData = $this->normalizePlatformCandidate(
+            $data['platform'] ?? $data['device_platform'] ?? $data['deviceType'] ?? $data['os'] ?? null
+        );
+        if ($fromData !== null) {
+            return $fromData;
+        }
+
+        $ua = (string) $request->userAgent();
+        if (preg_match('/(iPhone|iPad|iPod|iOS|CFNetwork|CriOS)/i', $ua) === 1) {
             return User::REGISTERED_FROM_IOS;
+        }
+        if (stripos($ua, 'Android') !== false) {
+            return User::REGISTERED_FROM_ANDROID;
         }
 
         return User::REGISTERED_FROM_WEB;
+    }
+
+    /**
+     * On password / social login and email verify, keep registered_from in sync with the current client.
+     */
+    public function syncRegisteredFromOnLogin(User $user, Request $request): void
+    {
+        if ($user->isAdminRole()) {
+            return;
+        }
+
+        $next = $this->resolveRegisteredFromRequest($request);
+        if ((string) $user->registered_from === $next) {
+            return;
+        }
+
+        $user->update(['registered_from' => $next]);
+    }
+
+    private function normalizePlatformCandidate(mixed $raw): ?string
+    {
+        $candidate = strtolower(trim((string) $raw));
+        if ($candidate === '') {
+            return null;
+        }
+        if (in_array($candidate, ['ios', 'iphone', 'ipados', 'ipad', 'ipod', 'apple'], true)) {
+            return User::REGISTERED_FROM_IOS;
+        }
+        if (in_array($candidate, [User::REGISTERED_FROM_ANDROID, 'droid', 'aosp', 'fuchsia'], true)) {
+            return User::REGISTERED_FROM_ANDROID;
+        }
+        if (in_array($candidate, [User::REGISTERED_FROM_WEB, 'browser', 'desktop', 'pwa', 'www'], true)) {
+            return User::REGISTERED_FROM_WEB;
+        }
+
+        return null;
     }
 
     /**

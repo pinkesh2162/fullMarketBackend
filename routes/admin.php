@@ -1,11 +1,11 @@
 <?php
 
-use App\Http\Controllers\Admin\AuthController;
-use App\Http\Controllers\Admin\ClaimController;
-use App\Http\Controllers\Admin\DashboardController;
-use App\Http\Controllers\Admin\ListingController;
-use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Api\Admin\AdminNotificationController;
+use App\Http\Controllers\Api\Admin\AuthController;
+use App\Http\Controllers\Api\Admin\ClaimController;
+use App\Http\Controllers\Api\Admin\DashboardController;
+use App\Http\Controllers\Api\Admin\ListingController;
+use App\Http\Controllers\Api\Admin\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['firebase.admin', 'throttle:admin-push'])
@@ -42,4 +42,8 @@ Route::middleware(['auth:sanctum', 'admin'])
         // Route::patch('claims/{id}/status', [ClaimController::class, 'changeStatus'])->whereNumber('id');
         Route::post('claims/{id}/status', [ClaimController::class, 'changeStatus'])->whereNumber('id');
         Route::delete('claims/{id}', [ClaimController::class, 'destroy'])->whereNumber('id');
+
+        Route::get('notifications/audience', [AdminNotificationController::class, 'audience']);
+        Route::get('notifications/filters', [AdminNotificationController::class, 'filters']);
+        Route::post('notifications/panel-send', [AdminNotificationController::class, 'sendNotification']);
     });

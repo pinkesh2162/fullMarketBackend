@@ -67,6 +67,8 @@ class AuthController extends Controller
         }
 
         try {
+            $this->userRepo->syncRegisteredFromOnLogin($user, $request);
+            $user->refresh();
             $this->ensureUniqueKeysOnLogin($user);
             $user->loadMissing(['media', 'store', 'stores']);
             $token = $user->createToken('auth_token')->plainTextToken;
@@ -106,7 +108,7 @@ class AuthController extends Controller
             'otp' => 'required|string|size:6',
         ]);
 
-        $data = $this->userRepo->verifyOtp($request->email, $request->otp);
+        $data = $this->userRepo->verifyOtp($request->email, $request->otp, $request);
 
         return $this->actionSuccess('email_verified', $data);
     }
