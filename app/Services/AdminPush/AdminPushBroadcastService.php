@@ -2,6 +2,7 @@
 
 namespace App\Services\AdminPush;
 
+use App\Models\AdminNotificationCampaign;
 use App\Models\User;
 use App\Services\FcmService;
 use Carbon\Carbon;
@@ -14,14 +15,15 @@ class AdminPushBroadcastService
     public function __construct(
         protected FcmService $fcm,
         protected AdminPushFirestoreWriter $firestore,
-        protected UserSegmentQuery $segments
+        protected UserSegmentQuery $segments,
+        protected AdminNotificationHistoryRecorder $history
     ) {}
 
     /**
      * @param  array<string, mixed>  $input  Validated request payload
      * @return array{http_status: int, payload: array<string, mixed>}
      */
-    public function handle(array $input, stdClass $adminClaims): array
+    public function handle(array $input, stdClass $adminClaims, ?int $actorUserId = null, string $source = 'firebase_token'): array
     {
         set_time_limit(0);
 
@@ -51,17 +53,6 @@ class AdminPushBroadcastService
                     ],
                 ];
             }
-        }
-
-        if (! $dryRun && ! $this->firestore->isAvailable()) {
-            return [
-                'http_status' => 503,
-                'payload' => [
-                    'ok' => false,
-                    'code' => 'firestore_unavailable',
-                    'message' => 'Firestore is required for campaign history and audit logging.',
-                ],
-            ];
         }
 
         if (! $dryRun && ! $this->fcm->isConfigured()) {
@@ -124,42 +115,56 @@ class AdminPushBroadcastService
             ];
         }
 
-        if ($scheduledFuture && $scheduledCarbon) {
-            try {
-                $this->firestore->setCampaign($campaignId, [
-                    'title' => $title,
-                    'body' => $body,
-                    'segmentId' => $segmentId,
-                    'segmentLabel' => $segmentLabel,
-                    'countryFilter' => $countryFilter,
-                    'cityFilter' => $cityFilter,
-                    'targetedUsers' => $targetedUsers,
-                    'reachableDevices' => $reachableDevices,
-                    'estimatedReach' => $reachableDevices,
-                    'sentCount' => 0,
-                    'failedCount' => 0,
-                    'skippedNoToken' => $skippedNoToken,
-                    'status' => 'queued',
-                    'errorMessage' => null,
-                    'createdBy' => $createdBy,
-                    'createdAt' => now()->utc()->format('Y-m-d\TH:i:s.v\Z'),
-                    'scheduledAt' => $scheduledCarbon->toIso8601String(),
-                    'processingStartedAt' => null,
-                    'completedAt' => null,
-                    'metadata' => $metadata,
-                ]);
-            } catch (\Throwable $e) {
-                Log::error('admin_push.scheduled_campaign_write_failed', ['message' => $e->getMessage()]);
+        $sourceNorm = in_array($source, [AdminNotificationCampaign::SOURCE_ADMIN_PANEL, AdminNotificationCampaign::SOURCE_FIREBASE], true)
+            ? $source
+            : AdminNotificationCampaign::SOURCE_FIREBASE;
 
-                return [
-                    'http_status' => 500,
-                    'payload' => [
-                        'ok' => false,
-                        'code' => 'persistence_failed',
-                        'message' => 'Could not persist scheduled campaign.',
-                    ],
-                ];
+        if ($scheduledFuture && $scheduledCarbon) {
+            if ($this->firestore->isAvailable()) {
+                try {
+                    $this->firestore->setCampaign($campaignId, [
+                        'title' => $title,
+                        'body' => $body,
+                        'segmentId' => $segmentId,
+                        'segmentLabel' => $segmentLabel,
+                        'countryFilter' => $countryFilter,
+                        'cityFilter' => $cityFilter,
+                        'targetedUsers' => $targetedUsers,
+                        'reachableDevices' => $reachableDevices,
+                        'estimatedReach' => $reachableDevices,
+                        'sentCount' => 0,
+                        'failedCount' => 0,
+                        'skippedNoToken' => $skippedNoToken,
+                        'status' => 'queued',
+                        'errorMessage' => null,
+                        'createdBy' => $createdBy,
+                        'createdAt' => now()->utc()->format('Y-m-d\TH:i:s.v\Z'),
+                        'scheduledAt' => $scheduledCarbon->toIso8601String(),
+                        'processingStartedAt' => null,
+                        'completedAt' => null,
+                        'metadata' => $metadata,
+                    ]);
+                } catch (\Throwable $e) {
+                    Log::warning('admin_push.scheduled_campaign_firestore_write_failed', ['message' => $e->getMessage()]);
+                }
             }
+
+            $this->history->recordStart(
+                $campaignId,
+                $title,
+                $body,
+                $segmentId,
+                $segmentLabel,
+                $countryFilter,
+                $cityFilter,
+                $targetedUsers,
+                $reachableDevices,
+                $skippedNoToken,
+                AdminNotificationCampaign::STATUS_QUEUED,
+                $adminClaims,
+                $actorUserId,
+                $sourceNorm
+            );
 
             $this->appendAdminActionSafe($adminClaims, $campaignId, $targetedUsers, $reachableDevices, 0, 0, $skippedNoToken, 'queued', 'success', 'Campaign queued for scheduled delivery.');
 
@@ -178,40 +183,50 @@ class AdminPushBroadcastService
             ];
         }
 
-        try {
-            $this->firestore->setCampaign($campaignId, [
-                'title' => $title,
-                'body' => $body,
-                'segmentId' => $segmentId,
-                'segmentLabel' => $segmentLabel,
-                'countryFilter' => $countryFilter,
-                'cityFilter' => $cityFilter,
-                'targetedUsers' => $targetedUsers,
-                'reachableDevices' => $reachableDevices,
-                'estimatedReach' => $reachableDevices,
-                'sentCount' => 0,
-                'failedCount' => 0,
-                'skippedNoToken' => $skippedNoToken,
-                'status' => 'processing',
-                'errorMessage' => null,
-                'createdBy' => $createdBy,
-                'createdAt' => now()->utc()->format('Y-m-d\TH:i:s.v\Z'),
-                'processingStartedAt' => now()->utc()->format('Y-m-d\TH:i:s.v\Z'),
-                'completedAt' => null,
-                'metadata' => $metadata,
-            ]);
-        } catch (\Throwable $e) {
-            Log::error('admin_push.campaign_start_write_failed', ['message' => $e->getMessage()]);
-
-            return [
-                'http_status' => 500,
-                'payload' => [
-                    'ok' => false,
-                    'code' => 'persistence_failed',
-                    'message' => 'Could not create campaign document.',
-                ],
-            ];
+        if ($this->firestore->isAvailable()) {
+            try {
+                $this->firestore->setCampaign($campaignId, [
+                    'title' => $title,
+                    'body' => $body,
+                    'segmentId' => $segmentId,
+                    'segmentLabel' => $segmentLabel,
+                    'countryFilter' => $countryFilter,
+                    'cityFilter' => $cityFilter,
+                    'targetedUsers' => $targetedUsers,
+                    'reachableDevices' => $reachableDevices,
+                    'estimatedReach' => $reachableDevices,
+                    'sentCount' => 0,
+                    'failedCount' => 0,
+                    'skippedNoToken' => $skippedNoToken,
+                    'status' => 'processing',
+                    'errorMessage' => null,
+                    'createdBy' => $createdBy,
+                    'createdAt' => now()->utc()->format('Y-m-d\TH:i:s.v\Z'),
+                    'processingStartedAt' => now()->utc()->format('Y-m-d\TH:i:s.v\Z'),
+                    'completedAt' => null,
+                    'metadata' => $metadata,
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('admin_push.campaign_start_firestore_write_failed', ['message' => $e->getMessage()]);
+            }
         }
+
+        $this->history->recordStart(
+            $campaignId,
+            $title,
+            $body,
+            $segmentId,
+            $segmentLabel,
+            $countryFilter,
+            $cityFilter,
+            $targetedUsers,
+            $reachableDevices,
+            $skippedNoToken,
+            AdminNotificationCampaign::STATUS_PROCESSING,
+            $adminClaims,
+            $actorUserId,
+            $sourceNorm
+        );
 
         $concurrency = (int) config('admin_push.fcm_concurrency', 40);
         $chunkSize = (int) config('admin_push.user_query_chunk', 500);
@@ -260,21 +275,40 @@ class AdminPushBroadcastService
         }
 
         $deliveryFailed = $failed > 0 && $sent === 0;
-        $finalStatus = $deliveryFailed ? 'failed' : 'sent';
-        $errorMessage = $deliveryFailed ? 'FCM send failed for all attempts in this run.' : null;
-
-        try {
-            $this->firestore->setCampaign($campaignId, [
-                'sentCount' => $sent,
-                'failedCount' => $failed,
-                'skippedNoToken' => $skippedNoToken,
-                'status' => $finalStatus,
-                'errorMessage' => $errorMessage,
-                'completedAt' => now()->utc()->format('Y-m-d\TH:i:s.v\Z'),
-            ]);
-        } catch (\Throwable $e) {
-            Log::error('admin_push.campaign_complete_write_failed', ['message' => $e->getMessage()]);
+        if ($deliveryFailed) {
+            $finalStatus = AdminNotificationCampaign::STATUS_FAILED;
+            $errorMessage = 'FCM send failed for all attempts in this run.';
+        } elseif ($sent > 0 && $failed > 0) {
+            $finalStatus = AdminNotificationCampaign::STATUS_PARTIALLY_SENT;
+            $errorMessage = null;
+        } else {
+            $finalStatus = AdminNotificationCampaign::STATUS_SENT;
+            $errorMessage = null;
         }
+
+        if ($this->firestore->isAvailable()) {
+            try {
+                $this->firestore->setCampaign($campaignId, [
+                    'sentCount' => $sent,
+                    'failedCount' => $failed,
+                    'skippedNoToken' => $skippedNoToken,
+                    'status' => $finalStatus,
+                    'errorMessage' => $errorMessage,
+                    'completedAt' => now()->utc()->format('Y-m-d\TH:i:s.v\Z'),
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('admin_push.campaign_complete_firestore_write_failed', ['message' => $e->getMessage()]);
+            }
+        }
+
+        $this->history->recordComplete(
+            $campaignId,
+            $sent,
+            $failed,
+            $skippedNoToken,
+            $finalStatus,
+            $errorMessage
+        );
 
         $actionResult = $deliveryFailed ? 'failed' : 'success';
         $actionDetails = $deliveryFailed
@@ -401,6 +435,9 @@ class AdminPushBroadcastService
         string $result,
         string $details
     ): void {
+        if (! $this->firestore->isAvailable()) {
+            return;
+        }
         try {
             $this->firestore->appendAdminAction([
                 'action' => 'push_notification_sent',

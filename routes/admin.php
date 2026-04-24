@@ -46,5 +46,7 @@ Route::middleware(['auth:sanctum', 'admin'])
 
         Route::get('notifications/audience', [AdminNotificationController::class, 'audience']);
         Route::get('notifications/filters', [AdminNotificationController::class, 'filters']);
+        Route::get('notifications/history', [AdminNotificationController::class, 'history']);
+        Route::get('notifications/history/{id}', [AdminNotificationController::class, 'historyShow'])->whereNumber('id');
         Route::post('notifications/panel-send', [AdminNotificationController::class, 'sendNotification']);
     });

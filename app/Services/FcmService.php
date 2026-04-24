@@ -20,9 +20,11 @@ class FcmService
     public function __construct()
     {
         $this->client = new Client(['timeout' => 30]);
-        $keyPath = base_path(config('app.firebase_service_account'));
 
-        if (file_exists($keyPath)) {
+        // Same JSON as kreait/laravel-firebase (config/firebase.php + FIREBASE_CREDENTIALS), then legacy app.firebase_service_account
+        $keyPath = $this->resolveServiceAccountKeyPath();
+
+        if ($keyPath !== null && is_file($keyPath)) {
             $this->credentials = new ServiceAccountCredentials(
                 'https://www.googleapis.com/auth/cloud-platform',
                 $keyPath
@@ -30,8 +32,25 @@ class FcmService
             $decoded = json_decode((string) file_get_contents($keyPath), true);
             $this->projectId = is_array($decoded) ? ($decoded['project_id'] ?? null) : null;
         } else {
-            Log::warning("Firebase service account file not found at: {$keyPath}. Push notifications will not be sent.");
+            Log::warning('Firebase service account file not found for FcmService. Set FIREBASE_CREDENTIALS (see config/firebase.php) or FIREBASE_SERVICE_ACCOUNT / place JSON at project root.');
         }
+    }
+
+    private function resolveServiceAccountKeyPath(): ?string
+    {
+        $fromFirebaseConfig = config('firebase.projects.app.credentials');
+        if (is_string($fromFirebaseConfig) && $fromFirebaseConfig !== '' && is_file($fromFirebaseConfig)) {
+            return $fromFirebaseConfig;
+        }
+
+        $legacy = base_path((string) config('app.firebase_service_account', 'firebase_service_account.json'));
+        if (is_file($legacy)) {
+            return $legacy;
+        }
+
+        $rootDefault = base_path('serviceAccountKey.json');
+
+        return is_file($rootDefault) ? $rootDefault : null;
     }
 
     public function isConfigured(): bool

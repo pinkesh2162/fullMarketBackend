@@ -12,6 +12,8 @@
     "admin_login_required": "Use the administrator sign-in flow to access an admin account.",
     "admin_login_success": "Signed in successfully as administrator.",
     "admin_logout_success": "Signed out successfully.",
+    "admin_notification_history_fetched": "Admin notification history retrieved successfully.",
+    "admin_notification_history_item_fetched": "Admin notification campaign retrieved successfully.",
     "admin_only": "Access denied. Only administrator accounts may use this sign-in.",
     "ad campaign management (fb/google)": "Ad campaign management (FB/Google)",
     "advanced web development": "Advanced web development",

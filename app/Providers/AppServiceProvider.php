@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Firebase\FirebaseProjectManager;
 use App\Models\Store;
 use App\Models\User;
+use App\Services\AdminPush\AdminNotificationHistoryRecorder;
 use App\Services\AdminPush\AdminPushBroadcastService;
 use App\Services\AdminPush\AdminPushFirestoreWriter;
 use App\Services\AdminPush\UserSegmentQuery;
@@ -108,11 +109,16 @@ class AppServiceProvider extends ServiceProvider
 
         $this->app->singleton(UserSegmentQuery::class, fn () => new UserSegmentQuery);
 
+        $this->app->singleton(AdminNotificationHistoryRecorder::class, function ($app) {
+            return new AdminNotificationHistoryRecorder;
+        });
+
         $this->app->singleton(AdminPushBroadcastService::class, function ($app) {
             return new AdminPushBroadcastService(
                 $app->make(FcmService::class),
                 $app->make(AdminPushFirestoreWriter::class),
-                $app->make(UserSegmentQuery::class)
+                $app->make(UserSegmentQuery::class),
+                $app->make(AdminNotificationHistoryRecorder::class)
             );
         });
     }

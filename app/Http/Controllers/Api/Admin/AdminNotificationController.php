@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\SendAdminPanelNotificationRequest;
 use App\Http\Requests\Admin\SendAdminPushRequest;
+use App\Models\AdminNotificationCampaign;
 use App\Models\User;
 use App\Services\AdminPush\AdminPushBroadcastService;
 use App\Services\AdminPush\UserSegmentQuery;
@@ -37,7 +38,7 @@ class AdminNotificationController extends Controller
             $input['metadata'] = [];
         }
 
-        $result = $this->broadcast->handle($input, $claims);
+        $result = $this->broadcast->handle($input, $claims, null, AdminNotificationCampaign::SOURCE_FIREBASE);
 
         return response()->json($result['payload'], $result['http_status']);
     }
@@ -118,9 +119,70 @@ class AdminNotificationController extends Controller
             'email' => (string) ($user?->email ?? 'admin@local'),
         ];
 
-        $result = $this->broadcast->handle($payload, $claims);
+        $result = $this->broadcast->handle($payload, $claims, $user?->id, AdminNotificationCampaign::SOURCE_ADMIN_PANEL);
 
         return response()->json($result['payload'], $result['http_status']);
+    }
+
+    public function history(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'page' => 'nullable|integer|min:1',
+            'per_page' => 'nullable|integer|min:1|max:100',
+            'status' => 'nullable|string|in:all,sent,failed,partially_sent,processing,queued',
+            'search' => 'nullable|string|max:200',
+            'sort' => 'nullable|string|in:created_at,sent_at',
+            'order' => 'nullable|string|in:asc,desc',
+        ]);
+
+        $perPage = (int) ($validated['per_page'] ?? 20);
+        $status = isset($validated['status']) ? (string) $validated['status'] : 'all';
+        $search = isset($validated['search']) ? trim((string) $validated['search']) : '';
+        $sort = (string) ($validated['sort'] ?? 'created_at');
+        $order = strtolower((string) ($validated['order'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        $query = AdminNotificationCampaign::query()->where('dry_run', false);
+
+        if ($status !== 'all') {
+            $query->where('status', $status);
+        }
+
+        if ($search !== '') {
+            $term = '%'.$search.'%';
+            $query->where(function ($q) use ($term) {
+                $q->where('title', 'like', $term)
+                    ->orWhere('body', 'like', $term)
+                    ->orWhere('public_id', 'like', $term);
+            });
+        }
+
+        $query->orderBy($sort, $order);
+
+        $paginator = $query->paginate($perPage)->appends($request->query());
+        $items = $paginator->getCollection()->map(fn (AdminNotificationCampaign $c) => $c->toApiArray());
+        $paginator->setCollection($items);
+
+        $meta = [
+            'current_page' => $paginator->currentPage(),
+            'last_page' => $paginator->lastPage(),
+            'per_page' => $paginator->perPage(),
+            'total' => $paginator->total(),
+            'from' => $paginator->firstItem(),
+            'to' => $paginator->lastItem(),
+            'has_more_pages' => $paginator->hasMorePages(),
+        ];
+
+        return $this->actionSuccess('admin_notification_history_fetched', $paginator->items(), self::HTTP_OK, $meta);
+    }
+
+    public function historyShow(int $id): JsonResponse
+    {
+        $campaign = AdminNotificationCampaign::query()->where('dry_run', false)->find($id);
+        if ($campaign === null) {
+            return $this->notFound('Admin notification campaign not found.');
+        }
+
+        return $this->actionSuccess('admin_notification_history_item_fetched', $campaign->toApiArray());
     }
 
     /**
