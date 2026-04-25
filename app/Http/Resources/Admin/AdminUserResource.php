@@ -41,6 +41,7 @@ class AdminUserResource extends JsonResource
             'account_status' => $u->trashed() ? null : ($u->account_status ?? \App\Models\User::ACCOUNT_STATUS_ACTIVE),
             'email_verified_at' => $u->email_verified_at?->toIso8601String(),
             'created_at' => $u->created_at?->toIso8601String(),
+            'registered_at' => $u->created_at?->toIso8601String(),
             'updated_at' => $u->updated_at?->toIso8601String(),
             'deleted_at' => $u->deleted_at?->toIso8601String(),
         ];

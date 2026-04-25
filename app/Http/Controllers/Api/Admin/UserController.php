@@ -30,6 +30,8 @@ class UserController extends Controller
             'search' => 'nullable|string|max:255',
             'per_page' => 'nullable|integer|min:1|max:100',
             'page' => 'nullable|integer|min:1',
+            'sort' => 'nullable|in:created_at',
+            'sort_dir' => 'nullable|in:asc,desc',
         ]);
 
         $paginator = $this->adminUsers->paginateIndex($request);

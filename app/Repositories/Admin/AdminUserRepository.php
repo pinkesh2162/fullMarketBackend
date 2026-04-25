@@ -12,6 +12,8 @@ class AdminUserRepository
     public function paginateIndex(Request $request): LengthAwarePaginator
     {
         $perPage = min(100, max(1, (int) $request->query('per_page', 15)));
+        $sort = (string) $request->query('sort', 'created_at');
+        $sortDir = strtolower((string) $request->query('sort_dir', 'desc')) === 'asc' ? 'asc' : 'desc';
         $q = User::query()
             ->with(['media'])
             ->withCount([
@@ -19,13 +21,13 @@ class AdminUserRepository
                     $lq->whereNull('deleted_at');
                 },
                 'stores',
-            ])
-            ->orderByDesc('id');
+            ]);
 
         $this->applyStatusFilter($q, (string) $request->query('status', 'all'));
         $this->applySearch($q, (string) $request->query('q', $request->query('search', '')));
         $this->applyCountryFilter($q, (string) $request->query('country', 'all'));
         $this->applyOsFilter($q, (string) $request->query('os', 'all'));
+        $this->applySort($q, $sort, $sortDir);
 
         return $q->paginate($perPage);
     }
@@ -260,6 +262,23 @@ class AdminUserRepository
         if ($os === 'ios') {
             $q->where('users.registered_from', User::REGISTERED_FROM_IOS);
         }
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<User>  $q
+     */
+    private function applySort($q, string $sort, string $sortDir): void
+    {
+        // Keep deterministic paging by sorting in SQL before paginate().
+        if ($sort === 'created_at') {
+            $q->orderBy('users.created_at', $sortDir)
+                ->orderBy('users.id', $sortDir);
+
+            return;
+        }
+
+        $q->orderByDesc('users.created_at')
+            ->orderByDesc('users.id');
     }
 
     private function generateUniqueUserKey(): string
