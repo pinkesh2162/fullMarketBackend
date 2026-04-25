@@ -47,6 +47,8 @@ class User extends Authenticatable implements HasMedia
         'role',
         'account_status',
         'registered_from',
+        'platform',
+        'last_platform_seen_at',
     ];
 
     const PROFILE = 'user';
@@ -60,6 +62,12 @@ class User extends Authenticatable implements HasMedia
     public const REGISTERED_FROM_IOS = 'ios';
 
     public const REGISTERED_FROM_WEB = 'web';
+
+    public const PLATFORM_ANDROID = 'android';
+
+    public const PLATFORM_IOS = 'ios';
+
+    public const PLATFORM_UNKNOWN = 'unknown';
 
     /** @see \App\Repositories\Admin\AdminUserRepository for filters */
     public const ACCOUNT_STATUS_ACTIVE = 'active';
@@ -131,10 +139,22 @@ class User extends Authenticatable implements HasMedia
     protected $casts = [
         'email_verified_at' => 'datetime',
         'last_login_at' => 'datetime',
+        'last_platform_seen_at' => 'datetime',
         'password' => 'hashed',
         'location' => 'array',
         'data' => 'array',
     ];
+
+    public static function normalizePlatform(mixed $value): string
+    {
+        $platform = strtolower(trim((string) $value));
+
+        return match ($platform) {
+            self::PLATFORM_ANDROID => self::PLATFORM_ANDROID,
+            self::PLATFORM_IOS => self::PLATFORM_IOS,
+            default => self::PLATFORM_UNKNOWN,
+        };
+    }
 
     public function getProfilePhotoAttribute()
     {

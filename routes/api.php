@@ -55,7 +55,7 @@ Route::post('/send-notification-to-token', SendFcmTokenNotificationController::c
 
 Route::post('/send-notification-to-all-users', SendFcmToAllUsersController::class);
 
-Route::middleware(['auth:sanctum'])->group(function () {
+Route::middleware(['auth:sanctum', 'capture.platform'])->group(function () {
     //    user profile route
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/get-profile', [ProfileController::class, 'getProfile']);

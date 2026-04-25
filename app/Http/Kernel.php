@@ -3,6 +3,7 @@
 namespace App\Http;
 
 use App\Http\Middleware\Authenticate;
+use App\Http\Middleware\CaptureUserPlatform;
 use App\Http\Middleware\EncryptCookies;
 use App\Http\Middleware\EnsureAdminBroadcastSecret;
 use App\Http\Middleware\EnsureFirebaseAdmin;
@@ -95,5 +96,6 @@ class Kernel extends HttpKernel
         'firebase.admin' => EnsureFirebaseAdmin::class,
         'admin' => EnsureUserIsAdmin::class,
         'admin.broadcast' => EnsureAdminBroadcastSecret::class,
+        'capture.platform' => CaptureUserPlatform::class,
     ];
 }

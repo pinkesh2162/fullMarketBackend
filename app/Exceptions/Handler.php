@@ -68,15 +68,21 @@ class Handler extends ExceptionHandler
                     $code = $e->getStatusCode();
                 } else {
                     $code = $e->getCode();
-                    if ($code < 100 || $code >= 600) {
-                        $code = \Symfony\Component\HttpFoundation\Response::HTTP_INTERNAL_SERVER_ERROR;
-                    }
+                }
+
+                // Some exceptions (e.g. SQLSTATE) use non-numeric string codes like "42S22".
+                // JsonResponse requires an integer HTTP status.
+                $httpCode = (is_int($code) || (is_string($code) && ctype_digit($code)))
+                    ? (int) $code
+                    : \Symfony\Component\HttpFoundation\Response::HTTP_INTERNAL_SERVER_ERROR;
+                if ($httpCode < 100 || $httpCode >= 600) {
+                    $httpCode = \Symfony\Component\HttpFoundation\Response::HTTP_INTERNAL_SERVER_ERROR;
                 }
 
                 return response()->json([
                     'success' => false,
                     'message' => empty($e->getMessage()) ? __('Server Error') : __($e->getMessage()),
-                ], $code);
+                ], $httpCode);
             }
         });
 

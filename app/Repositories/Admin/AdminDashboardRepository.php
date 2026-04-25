@@ -70,6 +70,9 @@ class AdminDashboardRepository
 
         $minViews = (int) config('admin_push.featured_listing_min_views', 25);
         $postsPerDay = $this->postsPerDay($chartStart, $chartEnd, $chartDayCount, $minViews);
+        $osBreakdown = $this->osBreakdown($isMysql);
+        $topCountries = $this->topCountries(10, $isMysql);
+        $countryPlatformBreakdown = $this->countryPlatformBreakdown(10, $isMysql);
 
         return [
             'meta' => [
@@ -104,9 +107,20 @@ class AdminDashboardRepository
                 'posts_per_day' => $postsPerDay,
             ],
             'top_categories' => $this->topCategories(10),
+            'os_breakdown' => $osBreakdown,
+            'top_countries' => $topCountries,
+            'country_platform_breakdown' => $countryPlatformBreakdown,
             'demographics' => [
-                'top_countries' => $this->topCountries(10, $isMysql),
-                'operating_systems' => $this->osBreakdown($isMysql),
+                // Backward-compatible keys retained for existing admin clients.
+                'top_countries' => array_map(
+                    fn (array $row): array => ['label' => $row['country'], 'count' => $row['users']],
+                    $topCountries
+                ),
+                'operating_systems' => [
+                    ['os' => 'android', 'count' => $osBreakdown['android'], 'percent' => $osBreakdown['total'] > 0 ? round($osBreakdown['android'] / $osBreakdown['total'] * 100, 1) : 0.0],
+                    ['os' => 'ios', 'count' => $osBreakdown['ios'], 'percent' => $osBreakdown['total'] > 0 ? round($osBreakdown['ios'] / $osBreakdown['total'] * 100, 1) : 0.0],
+                    ['os' => 'unknown', 'count' => $osBreakdown['unknown'], 'percent' => $osBreakdown['total'] > 0 ? round($osBreakdown['unknown'] / $osBreakdown['total'] * 100, 1) : 0.0],
+                ],
             ],
         ];
     }
@@ -500,7 +514,7 @@ class AdminDashboardRepository
     }
 
     /**
-     * @return list<array{label: string, count: int}>
+     * @return list<array{country: string, users: int}>
      */
     private function topCountries(int $limit, bool $isMysql): array
     {
@@ -529,7 +543,7 @@ class AdminDashboardRepository
         $i = 0;
         $out = [];
         foreach ($counts as $name => $cnt) {
-            $out[] = ['label' => $name, 'count' => (int) $cnt];
+            $out[] = ['country' => $name, 'users' => (int) $cnt];
             $i++;
             if ($i >= $limit) {
                 break;
@@ -540,7 +554,7 @@ class AdminDashboardRepository
     }
 
     /**
-     * @return list<array{label: string, count: int}>
+     * @return list<array{country: string, users: int}>
      */
     private function topCountriesSlow(int $limit): array
     {
@@ -559,7 +573,7 @@ class AdminDashboardRepository
         $out = [];
         $i = 0;
         foreach ($counts as $label => $cnt) {
-            $out[] = ['label' => $label, 'count' => (int) $cnt];
+            $out[] = ['country' => $label, 'users' => (int) $cnt];
             $i++;
             if ($i >= $limit) {
                 break;
@@ -570,43 +584,36 @@ class AdminDashboardRepository
     }
 
     /**
-     * @return list<array{os: string, count: int, percent: float}>
+     * @return array{android: int, ios: int, unknown: int, total: int}
      */
     private function osBreakdown(bool $isMysql): array
     {
         if (! $isMysql) {
             return $this->osBreakdownSlow();
         }
-        $android = User::query()
-            ->whereNull('deleted_at')
-            ->where(function ($w) {
-                $w->whereRaw('LOWER(JSON_UNQUOTE(JSON_EXTRACT(data, \'$.platform\'))) = ?', ['android'])
-                    ->orWhereRaw('LOWER(JSON_UNQUOTE(JSON_EXTRACT(data, \'$.device_platform\'))) = ?', ['android'])
-                    ->orWhereRaw('LOWER(JSON_UNQUOTE(JSON_EXTRACT(data, \'$.deviceType\'))) = ?', ['android']);
-            })->count();
-        $ios = User::query()
-            ->whereNull('deleted_at')
-            ->where(function ($w) {
-                $w->whereRaw('LOWER(JSON_UNQUOTE(JSON_EXTRACT(data, \'$.platform\'))) in (?, ?)', ['ios', 'iphone'])
-                    ->orWhereRaw('LOWER(JSON_UNQUOTE(JSON_EXTRACT(data, \'$.device_platform\'))) = ?', ['ios'])
-                    ->orWhereRaw('LOWER(JSON_UNQUOTE(JSON_EXTRACT(data, \'$.deviceType\'))) in (?, ?)', ['ios', 'iphone']);
-            })->count();
-        $all = max(1, User::query()->whereNull('deleted_at')->count());
-        $other = $all - $android - $ios;
-        if ($other < 0) {
-            $other = 0;
+        $base = User::query()->whereNull('deleted_at');
+        $android = (clone $base)
+            ->where('platform', User::PLATFORM_ANDROID)
+            ->count();
+        $ios = (clone $base)
+            ->where('platform', User::PLATFORM_IOS)
+            ->count();
+        $total = (clone $base)->count();
+        $unknown = $total - $android - $ios;
+        if ($unknown < 0) {
+            $unknown = 0;
         }
-        $pct = fn (int $n) => round($n / $all * 100, 1);
 
         return [
-            ['os' => 'android', 'count' => $android, 'percent' => $pct($android)],
-            ['os' => 'ios', 'count' => $ios, 'percent' => $pct($ios)],
-            ['os' => 'unknown', 'count' => $other, 'percent' => $pct($other)],
+            'android' => $android,
+            'ios' => $ios,
+            'unknown' => $unknown,
+            'total' => $total,
         ];
     }
 
     /**
-     * @return list<array{os: string, count: int, percent: float}>
+     * @return array{android: int, ios: int, unknown: int, total: int}
      */
     private function osBreakdownSlow(): array
     {
@@ -617,37 +624,104 @@ class AdminDashboardRepository
             ->chunk(500, function (Collection $chunk) use (&$android, &$ios, &$total) {
                 foreach ($chunk as $u) {
                     $total++;
-                    $d = is_array($u->data) ? $u->data : [];
-                    $p = strtolower((string) ($d['platform'] ?? $d['device_platform'] ?? $d['deviceType'] ?? ''));
-                    if (str_contains($p, 'android')) {
+                    $p = User::normalizePlatform($u->platform ?? null);
+                    if ($p === User::PLATFORM_ANDROID) {
                         $android++;
 
                         continue;
                     }
-                    if ($p === 'ios' || $p === 'iphone' || str_contains($p, 'ios')) {
+                    if ($p === User::PLATFORM_IOS) {
                         $ios++;
-
-                        continue;
                     }
                 }
             });
-        if ($total < 1) {
-            return [
-                ['os' => 'android', 'count' => 0, 'percent' => 0.0],
-                ['os' => 'ios', 'count' => 0, 'percent' => 0.0],
-                ['os' => 'unknown', 'count' => 0, 'percent' => 0.0],
-            ];
+        $unknown = $total - $android - $ios;
+        if ($unknown < 0) {
+            $unknown = 0;
         }
-        $unk = $total - $android - $ios;
-        if ($unk < 0) {
-            $unk = 0;
-        }
-        $pct = fn (int $n) => round($n / $total * 100, 1);
 
         return [
-            ['os' => 'android', 'count' => $android, 'percent' => $pct($android)],
-            ['os' => 'ios', 'count' => $ios, 'percent' => $pct($ios)],
-            ['os' => 'unknown', 'count' => $unk, 'percent' => $pct($unk)],
+            'android' => $android,
+            'ios' => $ios,
+            'unknown' => $unknown,
+            'total' => $total,
         ];
+    }
+
+    /**
+     * @return list<array{country: string, android: int, ios: int, unknown: int, total: int}>
+     */
+    private function countryPlatformBreakdown(int $limit, bool $isMysql): array
+    {
+        if (! $isMysql) {
+            return $this->countryPlatformBreakdownSlow($limit);
+        }
+
+        $rows = DB::table('users')
+            ->whereNull('deleted_at')
+            ->select(['platform'])
+            ->selectRaw("COALESCE(
+                NULLIF(JSON_UNQUOTE(JSON_EXTRACT(location, '$.country')), ''),
+                NULLIF(JSON_UNQUOTE(JSON_EXTRACT(location, '$.countryName')), ''),
+                NULLIF(JSON_UNQUOTE(JSON_EXTRACT(location, '$.country_name')), ''),
+                'Unknown'
+            ) as country")
+            ->get();
+
+        $groups = [];
+        foreach ($rows as $row) {
+            $country = is_string($row->country) && trim($row->country) !== '' ? $row->country : 'Unknown';
+            $platform = User::normalizePlatform($row->platform ?? null);
+            if (! isset($groups[$country])) {
+                $groups[$country] = [
+                    'country' => $country,
+                    'android' => 0,
+                    'ios' => 0,
+                    'unknown' => 0,
+                    'total' => 0,
+                ];
+            }
+            $groups[$country][$platform]++;
+            $groups[$country]['total']++;
+        }
+
+        $items = array_values($groups);
+        usort($items, fn (array $a, array $b): int => $b['total'] <=> $a['total']);
+
+        return array_slice($items, 0, $limit);
+    }
+
+    /**
+     * @return list<array{country: string, android: int, ios: int, unknown: int, total: int}>
+     */
+    private function countryPlatformBreakdownSlow(int $limit): array
+    {
+        $groups = [];
+        User::query()->whereNull('deleted_at')->orderBy('id')
+            ->chunk(500, function (Collection $chunk) use (&$groups) {
+                foreach ($chunk as $u) {
+                    $loc = is_array($u->location) ? $u->location : [];
+                    $country = (string) ($loc['country'] ?? $loc['countryName'] ?? $loc['country_name'] ?? 'Unknown');
+                    $country = trim($country) !== '' ? $country : 'Unknown';
+                    $platform = User::normalizePlatform($u->platform ?? null);
+
+                    if (! isset($groups[$country])) {
+                        $groups[$country] = [
+                            'country' => $country,
+                            'android' => 0,
+                            'ios' => 0,
+                            'unknown' => 0,
+                            'total' => 0,
+                        ];
+                    }
+                    $groups[$country][$platform]++;
+                    $groups[$country]['total']++;
+                }
+            });
+
+        $items = array_values($groups);
+        usort($items, fn (array $a, array $b): int => $b['total'] <=> $a['total']);
+
+        return array_slice($items, 0, $limit);
     }
 }

@@ -17,6 +17,7 @@ class AdminUserResource extends JsonResource
         $loc = is_array($u->location) ? $u->location : [];
         $country = $loc['country'] ?? $loc['countryName'] ?? $loc['country_name'] ?? null;
         $data = is_array($u->data) ? $u->data : [];
+        $platform = $this->resolvePlatform($u, $data);
 
         return [
             'id' => $u->id,
@@ -33,7 +34,8 @@ class AdminUserResource extends JsonResource
             'profile_photo' => $u->profile_photo,
             'country' => is_string($country) ? $country : null,
             'registered_from' => $u->registered_from ?? \App\Models\User::REGISTERED_FROM_WEB,
-            'os' => $this->inferOs((string) ($u->registered_from ?? ''), $data),
+            'platform' => $platform,
+            'os' => $platform,
             'stores_count' => (int) ($u->stores_count ?? 0),
             'posts_count' => (int) ($u->listings_count ?? 0),
             'listings_count' => (int) ($u->listings_count ?? 0),
@@ -50,16 +52,23 @@ class AdminUserResource extends JsonResource
     /**
      * @param  array<string, mixed>  $data
      */
-    private function inferOs(string $registeredFrom, array $data): ?string
+    private function resolvePlatform(\App\Models\User $u, array $data): string
     {
-        $registeredFrom = strtolower(trim($registeredFrom));
+        $fromPlatform = \App\Models\User::normalizePlatform($u->platform ?? null);
+        if ($fromPlatform !== \App\Models\User::PLATFORM_UNKNOWN) {
+            return $fromPlatform;
+        }
+
+        $registeredFrom = strtolower(trim((string) ($u->registered_from ?? '')));
         if (in_array($registeredFrom, ['android', 'ios', 'web'], true)) {
-            return $registeredFrom;
+            return in_array($registeredFrom, ['android', 'ios'], true)
+                ? $registeredFrom
+                : \App\Models\User::PLATFORM_UNKNOWN;
         }
 
         $p = strtolower((string) ($data['platform'] ?? $data['device_platform'] ?? $data['deviceType'] ?? ''));
         if ($p === '') {
-            return 'web';
+            return \App\Models\User::PLATFORM_UNKNOWN;
         }
         if (str_contains($p, 'android')) {
             return 'android';
@@ -68,6 +77,6 @@ class AdminUserResource extends JsonResource
             return 'ios';
         }
 
-        return null;
+        return \App\Models\User::PLATFORM_UNKNOWN;
     }
 }

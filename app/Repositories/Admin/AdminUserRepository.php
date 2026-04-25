@@ -113,6 +113,7 @@ class AdminUserRepository
         }
 
         $user = User::create([
+            'platform' => User::normalizePlatform($request->input('registered_from', User::REGISTERED_FROM_WEB)),
             'first_name' => $first,
             'last_name' => $last,
             'email' => (string) $request->input('email'),
@@ -250,17 +251,32 @@ class AdminUserRepository
             return;
         }
         if ($os === User::REGISTERED_FROM_WEB) {
-            $q->where('users.registered_from', User::REGISTERED_FROM_WEB);
+            $q->where(function ($w) {
+                $w->where('users.platform', User::PLATFORM_UNKNOWN)
+                    ->orWhere('users.registered_from', User::REGISTERED_FROM_WEB);
+            });
 
             return;
         }
         if ($os === 'android') {
-            $q->where('users.registered_from', User::REGISTERED_FROM_ANDROID);
+            $q->where(function ($w) {
+                $w->where('users.platform', User::PLATFORM_ANDROID)
+                    ->orWhere(function ($legacy) {
+                        $legacy->whereNull('users.platform')
+                            ->where('users.registered_from', User::REGISTERED_FROM_ANDROID);
+                    });
+            });
 
             return;
         }
         if ($os === 'ios') {
-            $q->where('users.registered_from', User::REGISTERED_FROM_IOS);
+            $q->where(function ($w) {
+                $w->where('users.platform', User::PLATFORM_IOS)
+                    ->orWhere(function ($legacy) {
+                        $legacy->whereNull('users.platform')
+                            ->where('users.registered_from', User::REGISTERED_FROM_IOS);
+                    });
+            });
         }
     }
 
